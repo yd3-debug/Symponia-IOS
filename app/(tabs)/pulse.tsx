@@ -942,6 +942,7 @@ export default function ProfiloScreen() {
                             'symponia_subscribed',
                             'symponia_push_token',
                             'symponia_user_id',
+                            'symponia_last_reset_seen',
                           ]);
                           await supabase.auth.signOut();
                         },

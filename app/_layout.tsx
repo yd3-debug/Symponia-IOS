@@ -196,6 +196,7 @@ function AppShell() {
               'symponia_subscription_expires',
               'symponia_subscribed',
               'symponia_push_token',
+              'symponia_last_reset_seen',
             ])
               .then(() => AsyncStorage.setItem('symponia_user_id', userId))
               .then(() => syncProfile(userId));

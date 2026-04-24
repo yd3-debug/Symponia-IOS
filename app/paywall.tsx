@@ -11,7 +11,7 @@ import {
   type ProductPurchase,
   type SubscriptionProductId,
 } from '@/services/iap';
-import { syncTokens, checkSubscription, addTokens } from '@/services/supabaseTokens';
+import { syncTokens, checkSubscription } from '@/services/supabaseTokens';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
@@ -78,7 +78,7 @@ export default function PaywallScreen() {
               ['symponia_subscribed', 'true'],
               ['symponia_subscription_expires', result.expiresAt],
             ]);
-            await addTokens(SUB_META.reflections);
+            await syncTokens(); // server has already reset tokens; pick up authoritative value
             setNotice('Symponia Monthly activated.');
           }
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

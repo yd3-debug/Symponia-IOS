@@ -175,7 +175,7 @@ Deno.serve(async (req: Request) => {
   // ── Look up user by original_transaction_id ───────────────────────────────
   const { data: profileRow } = await admin
     .from('profiles')
-    .select('user_id, subscription_tokens, topup_tokens')
+    .select('user_id, subscription_tokens, topup_tokens, subscription_expires_at')
     .eq('original_transaction_id', originalTransactionId)
     .maybeSingle();
 
@@ -192,11 +192,27 @@ Deno.serve(async (req: Request) => {
   try {
     if (notificationType === 'DID_RENEW') {
       const expiresAt = expiresDateMs ? new Date(expiresDateMs).toISOString() : null;
-      await admin.from('profiles').update({
-        subscription_tokens: SUBSCRIPTION_SESSIONS_PER_RENEWAL,
+
+      // Idempotency: Apple may retry notifications. Only reset tokens when the
+      // billing period has genuinely advanced (expiresAt moved forward).
+      // If verify-receipt already handled this renewal client-side, the stored
+      // subscription_expires_at will already equal the incoming expiresAt — skip.
+      const existingExpiresAt: string | null = (profileRow as any)?.subscription_expires_at ?? null;
+      const isNewBillingPeriod = !existingExpiresAt || (expiresAt && expiresAt > existingExpiresAt);
+
+      const updateData: Record<string, unknown> = {
         ...(expiresAt ? { subscription_expires_at: expiresAt } : {}),
-      }).eq('user_id', userId);
-      console.log(`[apple-notification] DID_RENEW → reset to ${SUBSCRIPTION_SESSIONS_PER_RENEWAL} for user ${userId}`);
+      };
+
+      if (isNewBillingPeriod) {
+        updateData.tokens = SUBSCRIPTION_SESSIONS_PER_RENEWAL;
+        updateData.tokens_reset_at = new Date().toISOString();
+        console.log(`[apple-notification] DID_RENEW new period → reset to ${SUBSCRIPTION_SESSIONS_PER_RENEWAL} tokens for user ${userId}`);
+      } else {
+        console.log(`[apple-notification] DID_RENEW replay → skipping token reset for user ${userId}`);
+      }
+
+      await admin.from('profiles').update(updateData).eq('user_id', userId);
 
     } else if (notificationType === 'EXPIRED' || notificationType === 'DID_CANCEL') {
       const expiresAt = expiresDateMs

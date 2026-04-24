@@ -21,6 +21,7 @@ const PRODUCT_TOKENS: Record<string, number> = {
 };
 
 const SUBSCRIPTION_IDS = new Set(['com.symponia.premium.monthly']);
+const SUBSCRIPTION_TOKENS_PER_PERIOD = 350;
 
 // ── StoreKit 2 JWS decoder ─────────────────────────────────────────────────
 // react-native-iap v14 provides purchase.purchaseToken as a JWS (signed JWT)
@@ -161,19 +162,42 @@ Deno.serve(async (req: Request) => {
     const expiresAt = new Date(result.expiresDateMs).toISOString();
     const originalTxId: string | undefined = result.originalTransactionId ?? undefined;
 
+    // Idempotency: fetch existing profile to detect replays.
+    // A new billing period is identified by expiresAt moving forward.
+    // If the stored expiry already equals or exceeds the incoming one, the
+    // token reset for this period was already applied — skip it.
+    const { data: existingProfile } = await adminClient
+      .from('profiles')
+      .select('subscription_expires_at')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    const existingExpiresAt: string | null = existingProfile?.subscription_expires_at ?? null;
+    const isNewBillingPeriod = !existingExpiresAt || expiresAt > existingExpiresAt;
+
+    const upsertPayload: Record<string, unknown> = {
+      user_id: userId,
+      subscription_expires_at: expiresAt,
+      ...(originalTxId ? { original_transaction_id: originalTxId } : {}),
+    };
+
+    if (isNewBillingPeriod) {
+      upsertPayload.tokens = SUBSCRIPTION_TOKENS_PER_PERIOD;
+      upsertPayload.tokens_reset_at = new Date().toISOString();
+      console.log(`subscription new period — reset to ${SUBSCRIPTION_TOKENS_PER_PERIOD} tokens, expires ${expiresAt} → user ${userId}`);
+    } else {
+      console.log(`subscription replay — skipping token reset, expires ${expiresAt} → user ${userId}`);
+    }
+
     const { error } = await adminClient
       .from('profiles')
-      .upsert(
-        { user_id: userId, subscription_expires_at: expiresAt, ...(originalTxId ? { original_transaction_id: originalTxId } : {}) },
-        { onConflict: 'user_id' },
-      );
+      .upsert(upsertPayload, { onConflict: 'user_id' });
 
     if (error) {
       console.error('subscription upsert failed:', error);
       return new Response('DB error', { status: 500, headers: CORS });
     }
 
-    console.log(`subscription active until ${expiresAt} → user ${userId}`);
     return new Response(
       JSON.stringify({ type: 'subscription', expires_at: expiresAt }),
       { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } },

@@ -4,17 +4,26 @@ import { supabase } from './supabase';
 
 // ── Token model ───────────────────────────────────────────────────────────────
 // Single bucket. New users receive TRIAL_TOKENS once on first sign-up.
-// Purchased tokens (IAP) are added to the same bucket and roll over.
+// Subscriptions reset tokens to 350 each billing period (server writes tokens_reset_at).
 // AsyncStorage key: 'symponia_tokens'
+// AsyncStorage key: 'symponia_last_reset_seen' — ISO timestamp of last known server reset
 
-async function fetchRemoteTokens(): Promise<number | null> {
+interface RemoteProfile {
+  tokens: number | null;
+  tokens_reset_at: string | null;
+}
+
+async function fetchRemoteProfile(): Promise<RemoteProfile> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('tokens')
+    .select('tokens, tokens_reset_at')
     .maybeSingle();
 
   if (error) throw error;
-  return data?.tokens ?? null;
+  return {
+    tokens: data?.tokens ?? null,
+    tokens_reset_at: data?.tokens_reset_at ?? null,
+  };
 }
 
 async function upsertTokens(tokens: number): Promise<void> {
@@ -32,25 +41,44 @@ async function upsertTokens(tokens: number): Promise<void> {
 // ── App-level sync ────────────────────────────────────────────────────────────
 
 // Call on app launch / foreground. Returns authoritative token count.
+// When the server has reset tokens for a new billing period (tokens_reset_at
+// is newer than symponia_last_reset_seen), the server value is used directly
+// instead of the normal max(local, remote) reconciliation, so a user whose
+// subscription renewed while the app was closed gets their tokens back on
+// first open without relying solely on the Apple server-to-server webhook.
 export async function syncTokens(): Promise<number> {
   try {
-    const localStr = await AsyncStorage.getItem('symponia_tokens');
-    const remote = await fetchRemoteTokens();
+    const pairs = await AsyncStorage.multiGet(['symponia_tokens', 'symponia_last_reset_seen']);
+    const localStr = pairs[0][1];
+    const lastResetSeen = pairs[1][1];
+
+    const profile = await fetchRemoteProfile();
 
     let tokens: number;
 
-    if (remote === null) {
-      // Profile has no tokens row yet — preserve local if it exists (avoids
-      // wiping tokens when the remote fetch transiently returns null)
+    if (profile.tokens === null) {
+      // Profile has no tokens row yet — preserve local if it exists
       tokens = localStr !== null ? parseInt(localStr, 10) : TRIAL_TOKENS;
       await upsertTokens(tokens);
       await AsyncStorage.setItem('symponia_tokens', String(tokens));
     } else {
-      const local = localStr !== null ? parseInt(localStr, 10) : 0;
-      // Remote wins if higher (user bought tokens on another device / web)
-      tokens = Math.max(remote, local);
-      await AsyncStorage.setItem('symponia_tokens', String(tokens));
-      if (tokens !== remote) await upsertTokens(tokens);
+      const serverResetAt = profile.tokens_reset_at;
+      const hasNewReset = serverResetAt && (!lastResetSeen || serverResetAt > lastResetSeen);
+
+      if (hasNewReset) {
+        // Server reset tokens for a new billing period — trust server value
+        tokens = profile.tokens;
+        await AsyncStorage.multiSet([
+          ['symponia_tokens', String(tokens)],
+          ['symponia_last_reset_seen', serverResetAt],
+        ]);
+      } else {
+        // Normal reconciliation: remote wins if higher (e.g. purchased on another device)
+        const local = localStr !== null ? parseInt(localStr, 10) : 0;
+        tokens = Math.max(profile.tokens, local);
+        await AsyncStorage.setItem('symponia_tokens', String(tokens));
+        if (tokens !== profile.tokens) await upsertTokens(tokens);
+      }
     }
 
     return tokens;
