@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "Symponia",
+    "slug": "symponia",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "symponia",
+    "icon": "./Assets/images/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./Assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0E0B1A"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.symponia.app",
+      "buildNumber": "31",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSUserNotificationsUsageDescription": "Symponia would like to send you a daily reflection — a short, centering thought for your morning.",
+        "NSMicrophoneUsageDescription": "Symponia listens to your voice so you can speak your questions.",
+        "NSSpeechRecognitionUsageDescription": "Symponia transcribes your voice to text.",
+        "NSPhotoLibraryUsageDescription": "Symponia does not access your photo library."
+      }
+    },
+    "android": {
+      "icon": "./Assets/images/icon.png",
+      "adaptiveIcon": {
+        "foregroundImage": "./Assets/images/icon.png",
+        "backgroundColor": "#0C1014"
+      },
+      "package": "com.symponia.app"
+    },
+    "web": {
+      "favicon": "./Assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-dev-client",
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./Assets/images/icon.png",
+          "color": "#0C1014"
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f8dcbb94-7850-4283-9bce-550979a54dbf"
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+project_id = "jrwvjezpmexsewoicomz"
+
+[functions.oracle]
+verify_jwt = false
