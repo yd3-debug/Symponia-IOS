@@ -677,7 +677,7 @@ export default function ProfiloScreen() {
                 </View>
               ) : (
                 <Text style={[styles.tokenPackNote, { color: colors.textDim, marginTop: 4 }]}>
-                  Reflection Packs are available once you subscribe to Symponia Monthly.
+                  Subscribe to Symponia Monthly for 350 reflections every month.
                 </Text>
               )}
             </View>

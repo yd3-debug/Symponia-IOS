@@ -104,7 +104,7 @@ export async function checkSubscription(): Promise<boolean> {
   }
 }
 
-// Add tokens to the user's balance (e.g. after subscription or pack purchase).
+// Add tokens to the user's balance (e.g. after subscription renewal).
 export async function addTokens(amount: number): Promise<number> {
   try {
     const localStr = await AsyncStorage.getItem('symponia_tokens');

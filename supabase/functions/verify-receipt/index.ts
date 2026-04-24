@@ -1,5 +1,5 @@
 // Symponia — verify-receipt Edge Function
-// Validates Apple receipts for both consumable token packs and subscriptions.
+// Validates Apple receipts for subscriptions.
 //
 // Deploy: supabase functions deploy verify-receipt
 // Required secrets:
@@ -204,7 +204,7 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // ── Consumable token pack ─────────────────────────────────────────────────
+  // ── Unknown / legacy product ──────────────────────────────────────────────
   const tokensToAdd = PRODUCT_TOKENS[verifiedId] ?? 0;
   if (tokensToAdd === 0) {
     return new Response('Unknown product', { status: 400, headers: CORS });
