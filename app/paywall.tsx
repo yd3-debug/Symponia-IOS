@@ -1,24 +1,20 @@
 import { useTheme } from '@/constants/ThemeContext';
 import {
-  IAP_PRODUCTS,
   SUBSCRIPTION_PRODUCTS,
   cleanupIAP,
-  fetchStoreProducts,
   fetchStoreSubscriptions,
   initIAP,
   restorePurchases,
   setupPurchaseListeners,
-  triggerPurchase,
   triggerSubscription,
   verifyAndFinishPurchase,
-  type IAPProductId,
   type ProductPurchase,
   type SubscriptionProductId,
 } from '@/services/iap';
 import { syncTokens, checkSubscription, addTokens } from '@/services/supabaseTokens';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Linking,
@@ -34,12 +30,7 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 const FONT = Platform.select({ ios: 'Helvetica Neue', android: 'Roboto', default: 'System' });
 
-// ── Reflection counts per product ─────────────────────────────────────────────
-
-const PACK_META: Record<string, { reflections: number; approxMessages: number }> = {
-  'com.symponia.tokens50':  { reflections: 50,  approxMessages: 100 },
-  'com.symponia.tokens150': { reflections: 150, approxMessages: 300 },
-};
+// ── Reflection counts per subscription ────────────────────────────────────────
 
 const SUB_META = {
   reflections: 350,
@@ -51,10 +42,7 @@ const SUB_META = {
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
-  const { subscriberMode } = useLocalSearchParams<{ subscriberMode?: string }>();
-  const isSubscriberMode = subscriberMode === '1';
 
-  const [storeProducts, setStoreProducts] = useState<{ productId: string; localizedPrice: string }[]>([]);
   const [subProducts, setSubProducts]     = useState<{ productId: string; localizedPrice: string }[]>([]);
   const [pricesError, setPricesError]     = useState(false);
   const [isPurchasing, setIsPurchasing]   = useState(false);
@@ -65,10 +53,9 @@ export default function PaywallScreen() {
     setPricesError(false);
     const timeoutId = setTimeout(() => setPricesError(true), 8000);
     initIAP()
-      .then(() => Promise.all([fetchStoreProducts(), fetchStoreSubscriptions()]))
-      .then(([products, subs]) => {
+      .then(() => fetchStoreSubscriptions())
+      .then((subs) => {
         clearTimeout(timeoutId);
-        setStoreProducts(products.map((p) => ({ productId: p.productId, localizedPrice: p.localizedPrice })));
         setSubProducts(subs.map((p) => ({ productId: p.productId, localizedPrice: p.localizedPrice })));
       })
       .catch(() => { clearTimeout(timeoutId); setPricesError(true); });
@@ -93,10 +80,6 @@ export default function PaywallScreen() {
             ]);
             await addTokens(SUB_META.reflections);
             setNotice('Symponia Monthly activated.');
-          } else {
-            const current = await syncTokens();
-            await AsyncStorage.setItem('symponia_tokens', String(current));
-            setNotice(`${result.tokensAdded} reflections added.`);
           }
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setTimeout(() => router.back(), 1400);
@@ -128,17 +111,6 @@ export default function PaywallScreen() {
     setNotice('');
     try {
       await triggerSubscription(productId);
-    } catch {
-      setIsPurchasing(false);
-    }
-  };
-
-  const handlePurchase = async (productId: IAPProductId) => {
-    if (isPurchasing) return;
-    setIsPurchasing(true);
-    setNotice('');
-    try {
-      await triggerPurchase(productId);
     } catch {
       setIsPurchasing(false);
     }
@@ -198,15 +170,15 @@ export default function PaywallScreen() {
         {/* Headline */}
         <Animated.View entering={FadeIn.duration(300)} style={styles.headlineBlock}>
           <Text style={[styles.headline, { color: colors.text }]}>
-            {isSubscriberMode ? 'Top up your reflections' : 'Keep reflecting with Symponia'}
+            Keep reflecting with Symponia
           </Text>
           <Text style={[styles.subheadline, { color: colors.textSub }]}>
-            {isSubscriberMode ? 'Pick a pack to keep going.' : 'Choose a plan that fits you.'}
+            Choose a plan that fits you.
           </Text>
         </Animated.View>
 
-        {/* ── Subscription — hidden for existing subscribers ────────────────── */}
-        <Animated.View entering={FadeInDown.duration(280).delay(60)} style={isSubscriberMode ? { display: 'none' } : undefined}>
+        {/* ── Subscription ─────────────────────────────────────────────────── */}
+        <Animated.View entering={FadeInDown.duration(280).delay(60)}>
           <View style={[styles.card, { borderColor: colors.cyanBorder, backgroundColor: cardBg }]}>
             <View style={[styles.cardBorderTop, { backgroundColor: colors.cyanBorder }]} />
             <View style={styles.cardPad}>
@@ -267,60 +239,8 @@ export default function PaywallScreen() {
           </View>
         </Animated.View>
 
-        {/* ── One-time packs ───────────────────────────────────────────────── */}
-        <Animated.View entering={FadeInDown.duration(280).delay(120)}>
-          <View style={[styles.card, { borderColor: colors.glassBorder, backgroundColor: cardBg }]}>
-            <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
-            <View style={styles.cardPad}>
-              <Text style={[styles.packsHeading, { color: colors.textSub }]}>
-                One-time packs (no subscription — yours to keep, no expiry)
-              </Text>
-
-              {IAP_PRODUCTS.map((pack) => {
-                const storeInfo = storeProducts.find((p) => p.productId === pack.id);
-                const loading = !pricesError && !storeInfo;
-                const priceForLegalText = pricesError ? '—' : (storeInfo?.localizedPrice || '…');
-                const meta = PACK_META[pack.id];
-                const isPopular = pack.id === 'com.symponia.tokens150';
-
-                return (
-                  <View key={pack.id} style={styles.packRow}>
-                    <View style={styles.packMeta}>
-                      {isPopular && (
-                        <View style={[styles.popularBadge, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder }]}>
-                          <Text style={[styles.popularText, { color: colors.cyan }]}>popular</Text>
-                        </View>
-                      )}
-                      <Text style={[styles.packLabel, { color: colors.text }]}>
-                        {isPopular ? 'Popular pack' : 'Small pack'}
-                        {` — ${priceForLegalText} — ${meta?.reflections ?? pack.tokens} reflections (~${meta?.approxMessages ?? pack.tokens * 2} messages)`}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={[
-                        styles.packBtn,
-                        {
-                          backgroundColor: isPurchasing ? 'transparent' : colors.cyanDim,
-                          borderColor: isPurchasing ? colors.glassBorder : colors.cyanBorder,
-                        },
-                      ]}
-                      onPress={pricesError ? loadPrices : () => handlePurchase(pack.id as IAPProductId)}
-                      disabled={isPurchasing || loading}
-                      activeOpacity={0.75}
-                    >
-                      <Text style={[styles.packBtnText, { color: isPurchasing ? colors.textDim : colors.cyan }]}>
-                        {isPurchasing ? '…' : 'Buy'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        </Animated.View>
-
         {/* ── Restore ──────────────────────────────────────────────────────── */}
-        <Animated.View entering={FadeInDown.duration(280).delay(180)}>
+        <Animated.View entering={FadeInDown.duration(280).delay(120)}>
           <TouchableOpacity
             style={[styles.restoreBtn, { borderColor: colors.glassBorder }]}
             onPress={handleRestore}
@@ -400,22 +320,6 @@ const styles = StyleSheet.create({
   legalRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
   legalLink: { fontSize: 11, fontFamily: FONT, fontWeight: '300', textDecorationLine: 'underline' },
   legalSep:  { fontSize: 11, fontFamily: FONT, fontWeight: '300' },
-
-  packsHeading: { fontSize: 12, fontFamily: FONT, fontWeight: '300', letterSpacing: 0.3, lineHeight: 18, marginBottom: 4 },
-
-  packRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4 },
-  packMeta: { flex: 1, gap: 4 },
-  packLabel: { fontSize: 13, fontFamily: FONT, fontWeight: '300', lineHeight: 19 },
-  popularBadge: { alignSelf: 'flex-start', borderRadius: 6, borderWidth: 0.5, paddingHorizontal: 7, paddingVertical: 2, marginBottom: 2 },
-  popularText: { fontSize: 9, fontFamily: FONT, fontWeight: '500', letterSpacing: 1.2 },
-
-  packBtn: {
-    borderRadius: 12,
-    borderWidth: 0.5,
-    paddingVertical: 9,
-    paddingHorizontal: 16,
-  },
-  packBtnText: { fontSize: 13, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.3 },
 
   restoreBtn: {
     alignSelf: 'center',

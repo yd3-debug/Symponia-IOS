@@ -663,28 +663,19 @@ export default function ProfiloScreen() {
                   1 REFLECTION = 1 RESPONSE
                 </Text>
               </View>
-              {isSubscribed ? IAP_PRODUCTS.map((pack) => {
-                const storeInfo = storeProducts.find((p) => p.productId === pack.id);
-                const loading = !pricesError && !storeInfo;
-                const priceLabel = pricesError ? 'tap to retry' : (storeInfo?.localizedPrice || '…');
-                return (
-                  <React.Fragment key={pack.id}>
-                    <TouchableOpacity
-                      style={[styles.tokenBtn, { borderColor: isPurchasingTokenId === pack.id ? colors.glassBorder : colors.cyanBorder, backgroundColor: isPurchasingTokenId === pack.id ? 'transparent' : colors.cyanDim, marginBottom: 2 }]}
-                      onPress={pricesError ? loadPrices : () => handleTokenPurchase(pack.id as IAPProductId)}
-                      disabled={!!isPurchasingTokenId || loading}
-                      activeOpacity={0.75}
-                    >
-                      <Text style={[styles.tokenBtnText, { color: isPurchasingTokenId === pack.id ? colors.textDim : colors.cyan }]}>
-                        {isPurchasingTokenId === pack.id ? 'processing…' : `${pack.tokens} reflections — ${priceLabel}`}
-                      </Text>
-                    </TouchableOpacity>
-                    <Text style={[styles.tokenPackNote, { color: colors.textDim, marginBottom: 10 }]}>
-                      one-time purchase · use in any mode · never expire
-                    </Text>
-                  </React.Fragment>
-                );
-              }) : (
+              {isSubscribed ? (
+                <View style={{ marginTop: 4, gap: 4 }}>
+                  <Text style={[styles.tokenPackNote, { color: colors.textSub }]}>
+                    {'350 reflections per month'}
+                  </Text>
+                  <Text style={[styles.tokenPackNote, { color: colors.textDim }]}>
+                    {'Archetype · My Day · Conversation'}
+                  </Text>
+                  <Text style={[styles.tokenPackNote, { color: colors.textDim }]}>
+                    {'Renews monthly with your subscription'}
+                  </Text>
+                </View>
+              ) : (
                 <Text style={[styles.tokenPackNote, { color: colors.textDim, marginTop: 4 }]}>
                   Reflection Packs are available once you subscribe to Symponia Monthly.
                 </Text>
@@ -745,7 +736,7 @@ export default function ProfiloScreen() {
                       </Text>
                     </TouchableOpacity>
                     <Text style={[styles.subRenewalNote, { color: colors.textDim }]}>
-                      {`${priceForLegalText}/month · auto-renews monthly · cancel anytime in App Store Settings`}
+                      {'auto-renews monthly · cancel anytime in App Store Settings'}
                     </Text>
                     {/* Legal links adjacent to purchase button — required by Apple */}
                     <View style={[styles.subLegalInline]}>

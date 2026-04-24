@@ -5,18 +5,10 @@ import { streamAnimalSynthesis, streamArchetype, streamChat, type Message } from
 import { loadConversation, saveConversation, clearConversation } from '@/services/conversations';
 import { checkSubscription, deductToken, syncTokens } from '@/services/supabaseTokens';
 import {
-  IAP_PRODUCTS,
-  SUBSCRIPTION_PRODUCTS,
   cleanupIAP,
-  fetchStoreProducts,
-  fetchStoreSubscriptions,
   initIAP,
   setupPurchaseListeners,
-  triggerPurchase,
-  triggerSubscription,
   verifyAndFinishPurchase,
-  type IAPProductId,
-  type SubscriptionProductId,
 } from '@/services/iap';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
@@ -439,13 +431,9 @@ export default function DialogoScreen() {
 
   const [tokens, setTokens] = useState(TRIAL_TOKENS);
   const [isSubscribed, setIsSubscribed] = useState(false);
-  const [showTokenCTA, setShowTokenCTA] = useState(false);
-  const [showSoftPaywall, setShowSoftPaywall] = useState(false);
+  const [subscriptionExpiry, setSubscriptionExpiry] = useState<string | null>(null);
+  const [showSubscriberEmpty, setShowSubscriberEmpty] = useState(false);
   const [aiConsentRevoked, setAiConsentRevoked] = useState(false);
-  const [isPurchasing, setIsPurchasing] = useState(false);
-  const [storeProducts, setStoreProducts] = useState<{ productId: string; localizedPrice: string }[]>([]);
-  const [subProducts, setSubProducts] = useState<{ productId: string; localizedPrice: string }[]>([]);
-  const [pricesError, setPricesError] = useState(false);
   const [userAnimals, setUserAnimals] = useState<string[]>([]);
   const [localAnimals, setLocalAnimals] = useState<string[]>([]);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -491,47 +479,30 @@ export default function DialogoScreen() {
   useEffect(() => {
     syncTokens().then(setTokens);
     checkSubscription().then(setIsSubscribed);
-    AsyncStorage.getItem('symponia_ai_consent').then((v) => {
-      setAiConsentRevoked(v === 'revoked');
-    });
+    AsyncStorage.getItem('symponia_ai_consent').then((v) => setAiConsentRevoked(v === 'revoked'));
+    AsyncStorage.getItem('symponia_subscription_expires').then(setSubscriptionExpiry);
   }, []);
 
   // Re-sync on tab focus (e.g. returning from paywall)
   useFocusEffect(useCallback(() => {
     syncTokens().then(setTokens);
     checkSubscription().then(setIsSubscribed);
-    AsyncStorage.getItem('symponia_ai_consent').then((v) => {
-      setAiConsentRevoked(v === 'revoked');
-    });
+    AsyncStorage.getItem('symponia_ai_consent').then((v) => setAiConsentRevoked(v === 'revoked'));
+    AsyncStorage.getItem('symponia_subscription_expires').then(setSubscriptionExpiry);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []));
 
-  const loadPrices = useCallback(() => {
-    setPricesError(false);
-    const timeoutId = setTimeout(() => setPricesError(true), 8000);
-    initIAP()
-      .then(() => Promise.all([fetchStoreProducts(), fetchStoreSubscriptions()]))
-      .then(([products, subs]) => {
-        clearTimeout(timeoutId);
-        setStoreProducts(products.map((p) => ({ productId: p.productId, localizedPrice: p.localizedPrice })));
-        setSubProducts(subs.map((p) => ({ productId: p.productId, localizedPrice: p.localizedPrice })));
-      })
-      .catch(() => { clearTimeout(timeoutId); setPricesError(true); });
-  }, []);
-
   // ── In-App Purchase lifecycle ──────────────────────────────────────────────
   useEffect(() => {
-    let removePurchaseListeners: (() => void) | undefined;
+    initIAP().catch(() => {});
 
-    loadPrices();
-
-    removePurchaseListeners = setupPurchaseListeners(
+    const removePurchaseListeners = setupPurchaseListeners(
       async (purchase) => {
-        setIsPurchasing(true);
         try {
           const result = await verifyAndFinishPurchase(purchase);
           if (result.type === 'subscription') {
             setIsSubscribed(true);
+            setSubscriptionExpiry(result.expiresAt);
             await AsyncStorage.multiSet([
               ['symponia_subscribed', 'true'],
               ['symponia_subscription_expires', result.expiresAt],
@@ -543,24 +514,19 @@ export default function DialogoScreen() {
               return next;
             });
           }
-          setShowTokenCTA(false);
         } catch (err) {
           console.warn('IAP verification failed:', err);
-        } finally {
-          setIsPurchasing(false);
         }
       },
       (err) => {
-        // code 2 = user cancelled — expected, not an error
         if ((err as any).code !== 'E_USER_CANCELLED') {
           console.warn('IAP error:', err);
         }
-        setIsPurchasing(false);
       },
     );
 
     return () => {
-      removePurchaseListeners?.();
+      removePurchaseListeners();
       cleanupIAP().catch(() => {});
     };
   }, []);
@@ -645,7 +611,11 @@ export default function DialogoScreen() {
     const trimmed = inputText.trim();
     if (!trimmed || isStreaming) return;
     if (tokens <= 0) {
-      router.push({ pathname: '/paywall', params: { subscriberMode: isSubscribed ? '1' : '0' } } as any);
+      if (isSubscribed) {
+        setShowSubscriberEmpty(true);
+      } else {
+        router.push('/paywall' as any);
+      }
       return;
     }
 
@@ -1003,127 +973,35 @@ export default function DialogoScreen() {
         />
       )}
 
-      {/* Token CTA overlay */}
-      {showTokenCTA && (
+      {/* Subscriber reflections depleted overlay */}
+      {showSubscriberEmpty && (
         <Animated.View
-          entering={FadeIn.duration(200)}
-          style={[StyleSheet.absoluteFill, styles.tokenOverlay, { backgroundColor: isDark ? 'rgba(6,4,20,0.88)' : colors.bg + 'E0' }]}
+          entering={FadeIn.duration(250)}
+          style={[StyleSheet.absoluteFill, styles.tokenOverlay, { backgroundColor: isDark ? 'rgba(6,4,20,0.92)' : colors.bg + 'E8' }]}
         >
-          <TouchableWithoutFeedback onPress={() => setShowTokenCTA(false)}>
+          <TouchableWithoutFeedback onPress={() => setShowSubscriberEmpty(false)}>
             <View style={StyleSheet.absoluteFill} />
           </TouchableWithoutFeedback>
           <View style={[styles.tokenSheet, { borderColor: colors.cyanBorder }]}>
             <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
             <View style={[styles.tokenSheetBg, { backgroundColor: isDark ? 'rgba(8,6,28,0.6)' : colors.bgMid + '99' }]} />
-            <Text style={[styles.tokenTitle, { color: colors.cyan }]}>SYMPONIA · PREMIUM</Text>
+            <Text style={[styles.tokenTitle, { color: colors.cyan }]}>REFLECTIONS RENEWED SOON</Text>
             <Text style={[styles.tokenBody, { color: colors.textSub }]}>
-              {"Your free reflections are used up.\nChoose a plan to keep going."}
+              {"You've used all 350 reflections for this month."}
             </Text>
-
-            {/* Subscription — shown first */}
-            {SUBSCRIPTION_PRODUCTS.map((sub) => {
-              const storeInfo = subProducts.find((p) => p.productId === sub.id);
-              const loading = !pricesError && !storeInfo;
-              const priceLabel = pricesError ? 'tap to retry' : (storeInfo?.localizedPrice || '…');
-              const priceForLegalText = pricesError ? '—' : (storeInfo?.localizedPrice || '…');
-              return (
-                <React.Fragment key={sub.id}>
-                  <Text style={[styles.tokenSubDesc, { color: colors.textSub }]}>
-                    {'Symponia Monthly'}
-                  </Text>
-                  <Text style={[styles.tokenSubFeatures, { color: colors.textDim }]}>
-                    {'350 reflection sessions every month, across Archetype, My Day, and Conversation.\nAuto-renews until cancelled.'}
-                  </Text>
-                  <TouchableOpacity
-                    style={[styles.tokenBtn, { backgroundColor: colors.cyan + '22', borderColor: colors.cyan, marginBottom: 4 }]}
-                    onPress={() => {
-                      if (pricesError) { loadPrices(); return; }
-                      if (!isPurchasing) triggerSubscription(sub.id as SubscriptionProductId).catch(console.warn);
-                    }}
-                    activeOpacity={0.75}
-                    disabled={isPurchasing || loading}
-                  >
-                    <Text style={[styles.tokenBtnText, { color: colors.cyan }]}>
-                      {isPurchasing ? 'processing…' : `subscribe — ${priceLabel}/month`}
-                    </Text>
-                  </TouchableOpacity>
-                  <Text style={[styles.tokenRenewalNote, { color: colors.textDim }]}>
-                    {`${priceForLegalText}/month · auto-renews monthly · cancel anytime in App Store Settings`}
-                  </Text>
-                  <View style={styles.tokenLegalRow}>
-                    <TouchableOpacity onPress={() => Linking.openURL('https://symponia.io/privacy')} activeOpacity={0.7}>
-                      <Text style={[styles.tokenLegalLink, { color: colors.textDim }]}>privacy policy</Text>
-                    </TouchableOpacity>
-                    <Text style={[styles.tokenLegalSep, { color: colors.textDim }]}>·</Text>
-                    <TouchableOpacity onPress={() => Linking.openURL('https://symponia.io/terms')} activeOpacity={0.7}>
-                      <Text style={[styles.tokenLegalLink, { color: colors.textDim }]}>terms of use</Text>
-                    </TouchableOpacity>
-                  </View>
-                </React.Fragment>
-              );
-            })}
-
-            {/* Divider */}
-            <Text style={[styles.tokenBody, { color: colors.textDim, fontSize: 11, marginVertical: 4 }]}>
-              or top up with tokens
-            </Text>
-
-            {/* Token packs */}
-            {IAP_PRODUCTS.map((pack) => {
-              const storeInfo = storeProducts.find((p) => p.productId === pack.id);
-              const loading = !pricesError && !storeInfo;
-              const priceLabel = pricesError ? 'tap to retry' : (storeInfo?.localizedPrice || '…');
-              return (
-                <React.Fragment key={pack.id}>
-                  <TouchableOpacity
-                    style={[styles.tokenBtn, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder, marginBottom: 2 }]}
-                    onPress={() => {
-                      if (pricesError) { loadPrices(); return; }
-                      if (!isPurchasing) triggerPurchase(pack.id as IAPProductId).catch(console.warn);
-                    }}
-                    activeOpacity={0.75}
-                    disabled={isPurchasing || loading}
-                  >
-                    <Text style={[styles.tokenBtnText, { color: colors.cyan }]}>
-                      {isPurchasing ? 'processing…' : `${pack.tokens} reflections — ${priceLabel}`}
-                    </Text>
-                  </TouchableOpacity>
-                  <Text style={[styles.tokenPackNote, { color: colors.textDim, marginBottom: 8 }]}>
-                    one-time purchase · use in any mode · never expire
-                  </Text>
-                </React.Fragment>
-              );
-            })}
-            <TouchableOpacity onPress={() => setShowTokenCTA(false)} style={styles.tokenDismiss}>
-              <Text style={[styles.tokenDismissText, { color: colors.textDim }]}>not now</Text>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-      )}
-
-      {/* Soft paywall — shown once, first time tokens hit 0 */}
-      {showSoftPaywall && (
-        <Animated.View
-          entering={FadeIn.duration(250)}
-          style={[StyleSheet.absoluteFill, styles.tokenOverlay, { backgroundColor: isDark ? 'rgba(6,4,20,0.92)' : colors.bg + 'E8' }]}
-        >
-          <View style={[styles.tokenSheet, { borderColor: colors.cyanBorder }]}>
-            <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
-            <View style={[styles.tokenSheetBg, { backgroundColor: isDark ? 'rgba(8,6,28,0.6)' : colors.bgMid + '99' }]} />
-            <Text style={[styles.tokenTitle, { color: colors.text }]}>
-              {"You've used your free reflections."}
-            </Text>
-            <Text style={[styles.tokenBody, { color: colors.textSub }]}>
-              {"Choose a plan to keep reflecting with Symponia."}
-            </Text>
+            {subscriptionExpiry && (
+              <Text style={[styles.tokenBody, { color: colors.textDim, fontSize: 13 }]}>
+                {`Your reflections renew on ${new Date(subscriptionExpiry).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}.`}
+              </Text>
+            )}
             <TouchableOpacity
               style={[styles.tokenBtn, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder, marginTop: 8 }]}
-              onPress={() => { setShowSoftPaywall(false); router.push('/paywall' as any); }}
+              onPress={() => Linking.openURL('itms-apps://apps.apple.com/account/subscriptions')}
               activeOpacity={0.75}
             >
-              <Text style={[styles.tokenBtnText, { color: colors.cyan }]}>See plans</Text>
+              <Text style={[styles.tokenBtnText, { color: colors.cyan }]}>manage subscription</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowSoftPaywall(false)} style={styles.tokenDismiss}>
+            <TouchableOpacity onPress={() => setShowSubscriberEmpty(false)} style={styles.tokenDismiss}>
               <Text style={[styles.tokenDismissText, { color: colors.textDim }]}>not now</Text>
             </TouchableOpacity>
           </View>
@@ -1267,58 +1145,6 @@ const styles = StyleSheet.create({
     fontFamily: FONT,
     fontWeight: '300',
     lineHeight: 24,
-    textAlign: 'center',
-  },
-  tokenSubDesc: {
-    fontSize: 13,
-    fontFamily: FONT,
-    fontWeight: '400',
-    letterSpacing: 0.2,
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  tokenSubFeatures: {
-    fontSize: 10,
-    fontFamily: FONT,
-    fontWeight: '300',
-    letterSpacing: 0.2,
-    lineHeight: 16,
-    textAlign: 'center',
-    marginBottom: 10,
-    paddingHorizontal: 8,
-  },
-  tokenRenewalNote: {
-    fontSize: 10,
-    fontFamily: FONT,
-    fontWeight: '300',
-    letterSpacing: 0.2,
-    textAlign: 'center',
-    lineHeight: 15,
-    marginBottom: 6,
-    paddingHorizontal: 8,
-  },
-  tokenLegalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  tokenLegalLink: {
-    fontSize: 10,
-    fontFamily: FONT,
-    fontWeight: '300',
-    letterSpacing: 0.3,
-  },
-  tokenLegalSep: {
-    fontSize: 10,
-    fontFamily: FONT,
-  },
-  tokenPackNote: {
-    fontSize: 10,
-    fontFamily: FONT,
-    fontWeight: '300',
-    letterSpacing: 0.2,
     textAlign: 'center',
   },
   tokenBtn: {

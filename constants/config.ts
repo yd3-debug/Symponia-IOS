@@ -7,9 +7,3 @@ export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // ── Tokens ────────────────────────────────────────────────────────────────────
 export const TRIAL_TOKENS = 25;     // one-time trial on first sign-up (~25 readings)
 
-// ── In-App Purchase product IDs (must match App Store Connect) ────────────────
-export const IAP_SKUS = [
-  'com.symponia.tokens50',
-  'com.symponia.tokens150',
-  'com.symponia.tokens500',
-] as const;
