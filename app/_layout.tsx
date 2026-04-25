@@ -3,6 +3,7 @@ import { ThemeProvider, useTheme } from '@/constants/ThemeContext';
 import '@/services/notifications'; // initialise setNotificationHandler at app start
 import { topUpDailyReflections } from '@/services/notifications';
 import { supabase } from '@/services/supabase';
+import { syncTokens } from '@/services/supabaseTokens';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import * as Notifications from 'expo-notifications';
@@ -146,6 +147,7 @@ function AppShell() {
       } else {
         AsyncStorage.setItem('symponia_user_id', session.user.id);
         syncProfile(session.user.id);
+        syncTokens().catch(() => {});
       }
       setIsReady(true);
     };
@@ -182,6 +184,7 @@ function AppShell() {
           if (storedId === userId) {
             // Same user — token refresh or re-mount. Just sync, don't wipe.
             syncProfile(userId);
+            syncTokens().catch(() => {});
           } else {
             console.log(`[Auth] User changed (${storedId ?? 'none'} → ${userId}) — clearing local state`);
             AsyncStorage.multiRemove([
@@ -199,7 +202,8 @@ function AppShell() {
               'symponia_last_reset_seen',
             ])
               .then(() => AsyncStorage.setItem('symponia_user_id', userId))
-              .then(() => syncProfile(userId));
+              .then(() => syncProfile(userId))
+              .then(() => syncTokens().catch(() => {}));
           }
         });
       }

@@ -135,10 +135,9 @@ export default function PaywallScreen() {
               ['symponia_subscribed', 'true'],
               ['symponia_subscription_expires', result.expiresAt],
             ]);
-          } else {
-            const current = await syncTokens();
-            await AsyncStorage.setItem('symponia_tokens', String(current));
           }
+          const count = await syncTokens();
+          await AsyncStorage.setItem('symponia_tokens', String(count));
         } catch {}
       }
       setNotice('Purchases restored.');

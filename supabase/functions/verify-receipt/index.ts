@@ -177,7 +177,7 @@ Deno.serve(async (req: Request) => {
 
     const upsertPayload: Record<string, unknown> = {
       user_id: userId,
-      subscription_expires_at: expiresAt,
+      ...(!existingExpiresAt || expiresAt >= existingExpiresAt ? { subscription_expires_at: expiresAt } : {}),
       ...(originalTxId ? { original_transaction_id: originalTxId } : {}),
     };
 

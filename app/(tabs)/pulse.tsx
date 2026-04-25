@@ -4,9 +4,9 @@ import { ANIMAL_ARCHETYPES } from '@/constants/systemPrompt';
 import { supabase } from '@/services/supabase';
 import * as Notifications from 'expo-notifications';
 import { requestNotificationPermission, scheduleDaily, scheduleMonthly, scheduleWeekly, topUpDailyReflections } from '@/services/notifications';
-import { restorePurchases, verifyAndFinishPurchase, initIAP, fetchStoreSubscriptions, fetchStoreProducts, triggerSubscription, triggerPurchase, SUBSCRIPTION_PRODUCTS, IAP_PRODUCTS, type ProductPurchase, type SubscriptionProductId, type IAPProductId } from '@/services/iap';
+import { restorePurchases, verifyAndFinishPurchase, initIAP, fetchStoreSubscriptions, triggerSubscription, SUBSCRIPTION_PRODUCTS, type ProductPurchase, type SubscriptionProductId } from '@/services/iap';
 import { clearAllConversations } from '@/services/conversations';
-import { checkSubscription } from '@/services/supabaseTokens';
+import { checkSubscription, syncTokens } from '@/services/supabaseTokens';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect } from 'expo-router';
@@ -202,9 +202,7 @@ export default function ProfiloScreen() {
   const [subscriptionExpiry, setSubscriptionExpiry] = useState('');
   const [isRestoring, setIsRestoring] = useState(false);
   const [isPurchasingSub, setIsPurchasingSub] = useState(false);
-  const [isPurchasingTokenId, setIsPurchasingTokenId] = useState<string | null>(null);
   const [subProducts, setSubProducts] = useState<{ productId: string; localizedPrice: string }[]>([]);
-  const [storeProducts, setStoreProducts] = useState<{ productId: string; localizedPrice: string }[]>([]);
   const [pricesError, setPricesError] = useState(false);
   const [userAnimals, setUserAnimals] = useState<string[]>([]);
 
@@ -212,11 +210,10 @@ export default function ProfiloScreen() {
     setPricesError(false);
     const timeoutId = setTimeout(() => setPricesError(true), 8000);
     initIAP()
-      .then(() => Promise.all([fetchStoreSubscriptions(), fetchStoreProducts()]))
-      .then(([subs, products]) => {
+      .then(() => fetchStoreSubscriptions())
+      .then((subs) => {
         clearTimeout(timeoutId);
         setSubProducts(subs);
-        setStoreProducts(products);
       })
       .catch(() => { clearTimeout(timeoutId); setPricesError(true); });
   }, []);
@@ -395,7 +392,11 @@ export default function ProfiloScreen() {
           console.log(`[Restore] ✗ ${purchase.productId} failed:`, e?.message ?? e);
         }
       }
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (restored) {
+        const count = await syncTokens();
+        setTokens(count);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
       Alert.alert(restored ? 'Restored' : 'Nothing to restore', restored ? 'Your purchases have been restored.' : 'No purchases could be verified.');
     } catch (e: any) {
       Alert.alert('Restore failed', e?.message ?? 'Something went wrong.');
@@ -417,19 +418,7 @@ export default function ProfiloScreen() {
     }
   };
 
-  const handleTokenPurchase = async (productId: IAPProductId) => {
-    if (isPurchasingTokenId) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setIsPurchasingTokenId(productId);
-    try {
-      await initIAP();
-      await triggerPurchase(productId);
-    } catch (e: any) {
-      Alert.alert('Purchase failed', e?.message ?? 'Something went wrong.');
-    } finally {
-      setIsPurchasingTokenId(null);
-    }
-  };
+
 
   const cardBg = colors.glassStrong;
   const cardStyle = [styles.card, { borderColor: colors.glassBorder }];
