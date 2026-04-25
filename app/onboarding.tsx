@@ -671,14 +671,18 @@ export default function OnboardingScreen() {
     }
 
     if (authData.user) {
-      await supabase.from('profiles').upsert({
+      const { error: profileError } = await supabase.from('profiles').upsert({
+        email: email.trim().toLowerCase(),
         user_id: authData.user.id,
         name: name.trim(),
         gender,
         animals: animals,
         frequency: depth,
         tokens: TRIAL_TOKENS,
-      }, { onConflict: 'user_id' });
+      }, { onConflict: 'email' });
+      if (profileError) {
+        console.warn('[Onboarding] Profile upsert failed (trigger row exists):', profileError.message);
+      }
     }
 
     await AsyncStorage.multiSet([
