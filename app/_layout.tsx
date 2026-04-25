@@ -3,7 +3,8 @@ import { ThemeProvider, useTheme } from '@/constants/ThemeContext';
 import '@/services/notifications'; // initialise setNotificationHandler at app start
 import { topUpDailyReflections } from '@/services/notifications';
 import { supabase } from '@/services/supabase';
-import { syncTokens } from '@/services/supabaseTokens';
+import { checkSubscription, syncTokens } from '@/services/supabaseTokens';
+import { TRIAL_TOKENS } from '@/constants/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import * as Notifications from 'expo-notifications';
@@ -28,30 +29,73 @@ async function migrateDeprecatedKeys() {
   await AsyncStorage.setItem('symponia_drefl_migration_v2', 'done');
 }
 
+// Restores symponia_notif_daily for users whose preference was wiped by the
+// old SIGNED_IN bug (fixed in 9ef452c). Only runs once, only acts when the
+// flag is absent AND the user already has iOS permission + archetypes set.
+async function migrateRestoreNotificationPref() {
+  const migrated = await AsyncStorage.getItem('symponia_drefl_migration_v3');
+  if (migrated === 'done') return;
+  await AsyncStorage.setItem('symponia_drefl_migration_v3', 'done');
+  const notifDaily = await AsyncStorage.getItem('symponia_notif_daily');
+  if (notifDaily !== null) return; // already set — don't overwrite
+  const [{ status }, animalsRaw] = await Promise.all([
+    Notifications.getPermissionsAsync(),
+    AsyncStorage.getItem('symponia_animals'),
+  ]);
+  if (status !== 'granted') return;
+  const animals: string[] = animalsRaw ? JSON.parse(animalsRaw) : [];
+  if (animals.length === 0) return;
+  await AsyncStorage.setItem('symponia_notif_daily', 'true');
+  console.log('[Symponia] Restored daily notification preference (was wiped by old SIGNED_IN bug)');
+}
+
 async function maybeTopUpDailyReflections() {
   try {
-    const [notifEnabled, animalsRaw, name, frequency, tokensStr, isSubscribedStr, lastOpenStr] = await Promise.all([
+    const [notifEnabled, animalsRaw, name, frequency, tokensStr, lastOpenStr] = await Promise.all([
       AsyncStorage.getItem('symponia_notif_daily'),
       AsyncStorage.getItem('symponia_animals'),
       AsyncStorage.getItem('symponia_name'),
       AsyncStorage.getItem('symponia_frequency'),
       AsyncStorage.getItem('symponia_tokens'),
-      AsyncStorage.getItem('symponia_subscribed'),
       AsyncStorage.getItem('symponia_last_app_open'),
     ]);
-    if (notifEnabled !== 'true') return;
+    if (notifEnabled !== 'true') {
+      console.log('[Symponia] Skipping topup — daily notif toggle is off');
+      return;
+    }
     const animals: string[] = animalsRaw ? JSON.parse(animalsRaw) : [];
-    if (animals.length === 0) return;
+    if (animals.length === 0) {
+      console.log('[Symponia] Skipping topup — no animals set');
+      return;
+    }
 
     // Cost protection: users with 0 tokens who haven't opened the app for 7+ days
     // won't have new reflections generated or scheduled. Resumes automatically on
     // their next app open.
     const tokens = tokensStr ? parseInt(tokensStr, 10) : 0;
-    const isSubscribed = isSubscribedStr === 'true';
     const lastOpen = lastOpenStr ? new Date(lastOpenStr) : null;
     const daysSinceOpen = lastOpen
       ? Math.floor((Date.now() - lastOpen.getTime()) / (1000 * 60 * 60 * 24))
       : 0;
+
+    // Use live Supabase subscription status so stale/wiped AsyncStorage cache
+    // doesn't misclassify a real subscriber as unsubscribed.
+    let isSubscribed: boolean;
+    try {
+      const [localIsSubscribedStr, liveIsSubscribed] = await Promise.all([
+        AsyncStorage.getItem('symponia_subscribed'),
+        checkSubscription(),
+      ]);
+      isSubscribed = liveIsSubscribed;
+      if (liveIsSubscribed && localIsSubscribedStr !== 'true') {
+        AsyncStorage.setItem('symponia_subscribed', 'true');
+      }
+    } catch (err) {
+      console.warn('[Symponia] checkSubscription failed in topup, falling back to cached value', err);
+      const localIsSubscribedStr = await AsyncStorage.getItem('symponia_subscribed');
+      isSubscribed = localIsSubscribedStr === 'true';
+    }
+
     if (!isSubscribed && tokens === 0 && daysSinceOpen >= 7) {
       console.log('[Symponia] Skipping reflection topup — cold depleted free user');
       const existing = await Notifications.getAllScheduledNotificationsAsync();
@@ -67,6 +111,25 @@ async function maybeTopUpDailyReflections() {
   } catch (err) {
     console.error('[Symponia] Notification top-up failed:', err);
   }
+}
+
+async function ensureProfileRow(user: { id: string; email?: string | null }) {
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('user_id')
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (existing) return;
+
+  if (!user.email) {
+    console.warn('[SelfHeal] Skipping — no email on session user');
+    return;
+  }
+
+  await supabase.from('profiles').upsert(
+    { email: user.email, user_id: user.id, tokens: TRIAL_TOKENS },
+    { onConflict: 'email' },
+  ).catch((err: any) => console.warn('[SelfHeal] Upsert failed:', err?.message));
 }
 
 async function registerPushToken() {
@@ -146,6 +209,7 @@ function AppShell() {
         router.replace('/signin');
       } else {
         AsyncStorage.setItem('symponia_user_id', session.user.id);
+        await ensureProfileRow(session.user);
         syncProfile(session.user.id);
         syncTokens().catch(() => {});
       }
@@ -183,6 +247,7 @@ function AppShell() {
         AsyncStorage.getItem('symponia_user_id').then((storedId) => {
           if (storedId === userId) {
             // Same user — token refresh or re-mount. Just sync, don't wipe.
+            ensureProfileRow(session.user).catch(() => {});
             syncProfile(userId);
             syncTokens().catch(() => {});
           } else {
@@ -202,6 +267,7 @@ function AppShell() {
               'symponia_last_reset_seen',
             ])
               .then(() => AsyncStorage.setItem('symponia_user_id', userId))
+              .then(() => ensureProfileRow(session.user).catch(() => {}))
               .then(() => syncProfile(userId))
               .then(() => syncTokens().catch(() => {}));
           }
@@ -211,7 +277,9 @@ function AppShell() {
     });
 
     registerPushToken();
-    migrateStaleNotifications().then(() => maybeTopUpDailyReflections());
+    migrateStaleNotifications()
+      .then(() => migrateRestoreNotificationPref())
+      .then(() => maybeTopUpDailyReflections());
     migrateDeprecatedKeys();
     AsyncStorage.setItem('symponia_last_app_open', new Date().toISOString());
 
