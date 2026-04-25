@@ -58,6 +58,47 @@ export async function cleanupIAP(): Promise<void> {
   await iap.endConnection();
 }
 
+// Initialises the global IAP connection with the correct listener-first ordering:
+//   1. Register purchaseUpdatedListener BEFORE initConnection so StoreKit
+//      transaction replays are caught immediately on connection.
+//   2. Call initConnection (StoreKit may replay pending transactions here).
+//   3. Drain pre-existing pending transactions via getAvailablePurchases.
+// Returns a cleanup function that removes the listener (does NOT end the
+// connection — call cleanupIAP() separately when the session ends).
+export async function initIAPGlobal(
+  onPurchase: (purchase: ProductPurchase) => Promise<void>,
+): Promise<() => void> {
+  const iap = await getIAP();
+  if (!iap) return () => {};
+
+  console.log('[IAP] initIAPGlobal — registering global listener');
+
+  // 1. Listener FIRST
+  const purchaseSub = iap.purchaseUpdatedListener((purchase) => {
+    console.log(`[IAP Global] purchaseUpdatedListener — product:${purchase.productId} txId:${(purchase as any).transactionId ?? 'n/a'}`);
+    onPurchase(purchase as ProductPurchase);
+  });
+
+  // 2. Connect — StoreKit replays pending transactions into the listener above
+  await iap.initConnection();
+  console.log('[IAP] initIAPGlobal — connection established');
+
+  // 3. Drain any transactions that preceded this listener registration
+  try {
+    const pending = await iap.getAvailablePurchases({});
+    console.log(`[IAP] initIAPGlobal — ${pending?.length ?? 0} pending transaction(s) on launch`);
+    for (const purchase of (pending ?? [])) {
+      console.log(`[IAP] Draining — product:${purchase.productId} txId:${(purchase as any).transactionId ?? 'n/a'}`);
+      await onPurchase(purchase as ProductPurchase);
+    }
+  } catch (err: any) {
+    console.warn('[IAP] initIAPGlobal — drain failed:', err?.message);
+  }
+
+  console.log('[IAP] initIAPGlobal — done');
+  return () => { purchaseSub.remove(); };
+}
+
 export async function fetchStoreProducts() {
   const iap = await getIAP();
   if (!iap) return [];

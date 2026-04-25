@@ -5,6 +5,7 @@ import { topUpDailyReflections } from '@/services/notifications';
 import { supabase } from '@/services/supabase';
 import { checkSubscription, syncTokens } from '@/services/supabaseTokens';
 import { TRIAL_TOKENS } from '@/constants/config';
+import { initIAPGlobal, cleanupIAP, verifyAndFinishPurchase, type ProductPurchase } from '@/services/iap';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import * as Notifications from 'expo-notifications';
@@ -132,6 +133,32 @@ async function ensureProfileRow(user: { id: string; email?: string | null }) {
   ).catch((err: any) => console.warn('[SelfHeal] Upsert failed:', err?.message));
 }
 
+// Global IAP purchase handler — single source of truth for server verification.
+// Runs from app boot through app lifetime; local listeners in echo/paywall do
+// UI-only work and never call verifyAndFinishPurchase.
+async function handleGlobalPurchase(purchase: ProductPurchase): Promise<void> {
+  console.log(`[IAP Global] Processing — product:${purchase.productId} txId:${(purchase as any).transactionId ?? 'n/a'}`);
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    console.warn('[IAP Global] No session — skipping verification, will replay on next sign-in');
+    return;
+  }
+  try {
+    const result = await verifyAndFinishPurchase(purchase);
+    console.log(`[IAP Global] Verified — type:${result.type}`);
+    if (result.type === 'subscription') {
+      await AsyncStorage.multiSet([
+        ['symponia_subscribed', 'true'],
+        ['symponia_subscription_expires', result.expiresAt],
+      ]);
+      await syncTokens();
+      console.log('[IAP Global] Subscription state written to AsyncStorage');
+    }
+  } catch (err: any) {
+    console.warn('[IAP Global] Verification failed:', err?.message);
+  }
+}
+
 async function registerPushToken() {
   try {
     const { status } = await Notifications.getPermissionsAsync();
@@ -148,6 +175,25 @@ function AppShell() {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
+    // ── Global IAP lifecycle ───────────────────────────────────────────────────
+    let removeIAPGlobal: (() => void) | null = null;
+    let iapStarting = false;
+
+    const startIAP = () => {
+      if (removeIAPGlobal || iapStarting) return;
+      iapStarting = true;
+      initIAPGlobal(handleGlobalPurchase)
+        .then((fn) => { removeIAPGlobal = fn; })
+        .catch((err) => console.warn('[IAP] initIAPGlobal failed:', err?.message))
+        .finally(() => { iapStarting = false; });
+    };
+
+    const stopIAP = () => {
+      removeIAPGlobal?.();
+      removeIAPGlobal = null;
+      cleanupIAP().catch(() => {});
+    };
+
     const syncProfile = async (userId: string) => {
       const { data: profile } = await supabase.from('profiles').select('*').eq('user_id', userId).single();
       if (profile) {
@@ -212,6 +258,7 @@ function AppShell() {
         await ensureProfileRow(session.user);
         syncProfile(session.user.id);
         syncTokens().catch(() => {});
+        startIAP();
       }
       setIsReady(true);
     };
@@ -237,7 +284,10 @@ function AppShell() {
         // Give the SDK 1.5s to re-establish the session (token refresh race)
         setTimeout(() => {
           supabase.auth.getSession().then(({ data: { session: current } }) => {
-            if (!current) router.replace('/signin');
+            if (!current) {
+              stopIAP();
+              router.replace('/signin');
+            }
           });
         }, 1500);
       } else if (event === 'SIGNED_IN' && session) {
@@ -247,6 +297,7 @@ function AppShell() {
         AsyncStorage.getItem('symponia_user_id').then((storedId) => {
           if (storedId === userId) {
             // Same user — token refresh or re-mount. Just sync, don't wipe.
+            startIAP(); // no-op if already running
             ensureProfileRow(session.user).catch(() => {});
             syncProfile(userId);
             syncTokens().catch(() => {});
@@ -267,6 +318,7 @@ function AppShell() {
               'symponia_last_reset_seen',
             ])
               .then(() => AsyncStorage.setItem('symponia_user_id', userId))
+              .then(() => { stopIAP(); startIAP(); }) // re-init for new user's session
               .then(() => ensureProfileRow(session.user).catch(() => {}))
               .then(() => syncProfile(userId))
               .then(() => syncTokens().catch(() => {}));
@@ -286,6 +338,7 @@ function AppShell() {
     return () => {
       subscription.unsubscribe();
       urlSubscription.remove();
+      stopIAP();
     };
   }, []);
 

@@ -1,13 +1,11 @@
 import { useTheme } from '@/constants/ThemeContext';
 import {
   SUBSCRIPTION_PRODUCTS,
-  cleanupIAP,
   fetchStoreSubscriptions,
   initIAP,
   restorePurchases,
   setupPurchaseListeners,
   triggerSubscription,
-  verifyAndFinishPurchase,
   type ProductPurchase,
   type SubscriptionProductId,
 } from '@/services/iap';
@@ -52,6 +50,9 @@ export default function PaywallScreen() {
   const loadPrices = useCallback(() => {
     setPricesError(false);
     const timeoutId = setTimeout(() => setPricesError(true), 8000);
+    // Defensive: ensures connection exists before fetchStoreSubscriptions.
+    // initConnection is idempotent, so this is a no-op if _layout.tsx
+    // already initialized IAP. Keeps paywall self-sufficient if deep-linked.
     initIAP()
       .then(() => fetchStoreSubscriptions())
       .then((subs) => {
@@ -68,25 +69,15 @@ export default function PaywallScreen() {
 
     loadPrices();
 
+    // Verification and finishTransaction are handled by the global listener in
+    // _layout.tsx. This listener only drives UI feedback (notice, haptic, navigation).
     removePurchaseListeners = setupPurchaseListeners(
       async (purchase: ProductPurchase) => {
-        setIsPurchasing(true);
-        try {
-          const result = await verifyAndFinishPurchase(purchase);
-          if (result.type === 'subscription') {
-            await AsyncStorage.multiSet([
-              ['symponia_subscribed', 'true'],
-              ['symponia_subscription_expires', result.expiresAt],
-            ]);
-            await syncTokens(); // server has already reset tokens; pick up authoritative value
-            setNotice('Symponia Monthly activated.');
-          }
+        setIsPurchasing(false);
+        if (SUBSCRIPTION_PRODUCTS.some((p) => p.id === purchase.productId)) {
+          setNotice('Symponia Monthly activated.');
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setTimeout(() => router.back(), 1400);
-        } catch {
-          setNotice('Purchase could not be verified. Please try again.');
-        } finally {
-          setIsPurchasing(false);
         }
       },
       (err) => {
@@ -99,7 +90,7 @@ export default function PaywallScreen() {
 
     return () => {
       removePurchaseListeners?.();
-      cleanupIAP().catch(() => {});
+      // Connection lifecycle managed by _layout.tsx global IAP handler.
     };
   }, []);
 

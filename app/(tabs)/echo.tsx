@@ -5,10 +5,8 @@ import { streamAnimalSynthesis, streamArchetype, streamChat, type Message } from
 import { loadConversation, saveConversation, clearConversation } from '@/services/conversations';
 import { checkSubscription, deductToken, syncTokens } from '@/services/supabaseTokens';
 import {
-  cleanupIAP,
-  initIAP,
+  SUBSCRIPTION_PRODUCTS,
   setupPurchaseListeners,
-  verifyAndFinishPurchase,
 } from '@/services/iap';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
@@ -492,42 +490,32 @@ export default function DialogoScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []));
 
-  // ── In-App Purchase lifecycle ──────────────────────────────────────────────
+  // ── In-App Purchase UI listener ────────────────────────────────────────────
+  // Verification and finishTransaction are handled by the global listener in
+  // _layout.tsx. This listener only updates React state for immediate UI feedback.
   useEffect(() => {
-    initIAP().catch(() => {});
-
     const removePurchaseListeners = setupPurchaseListeners(
       async (purchase) => {
+        if (!SUBSCRIPTION_PRODUCTS.some((p) => p.id === purchase.productId)) return;
+        // Global listener is running verifyAndFinishPurchase concurrently.
+        // Update subscription UI optimistically; syncTokens picks up the server
+        // value written by the global listener.
+        setIsSubscribed(true);
         try {
-          const result = await verifyAndFinishPurchase(purchase);
-          if (result.type === 'subscription') {
-            setIsSubscribed(true);
-            setSubscriptionExpiry(result.expiresAt);
-            await AsyncStorage.multiSet([
-              ['symponia_subscribed', 'true'],
-              ['symponia_subscription_expires', result.expiresAt],
-            ]);
-          } else {
-            setTokens((prev) => {
-              const next = prev + result.tokensAdded;
-              AsyncStorage.setItem('symponia_tokens', String(next));
-              return next;
-            });
-          }
-        } catch (err) {
-          console.warn('IAP verification failed:', err);
-        }
+          const count = await syncTokens();
+          setTokens(count);
+        } catch {}
       },
       (err) => {
         if ((err as any).code !== 'E_USER_CANCELLED') {
-          console.warn('IAP error:', err);
+          console.warn('[IAP] purchase error in echo:', err);
         }
       },
     );
 
     return () => {
       removePurchaseListeners();
-      cleanupIAP().catch(() => {});
+      // Connection lifecycle managed by _layout.tsx global IAP handler.
     };
   }, []);
 
