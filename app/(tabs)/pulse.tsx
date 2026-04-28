@@ -961,6 +961,7 @@ export default function ProfiloScreen() {
                           try {
                             const { error } = await supabase.functions.invoke('delete-account', {
                               method: 'POST',
+                              body: { confirm: true },
                             });
                             if (error) {
                               // Extract real error body from FunctionsHttpError
