@@ -1,5 +1,7 @@
 // Symponia — verify-receipt Edge Function
-// Validates Apple receipts for subscriptions.
+// Validates Apple receipts for subscriptions and consumable purchases.
+// StoreKit 2 JWS receipts are cryptographically verified against the leaf cert
+// public key extracted from the x5c header — no trust without verification.
 //
 // Deploy: supabase functions deploy verify-receipt
 // Required secrets:
@@ -7,13 +9,21 @@
 //   APPLE_SHARED_SECRET  ← App Store Connect → your app → In-App Purchases → App-Specific Shared Secret
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2?target=deno';
+import { verifyAppleJWS } from '../_shared/jws-verify.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const JSON_HEADERS = { ...CORS, 'Content-Type': 'application/json' };
+
+function jsonRes(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
+}
+
 // ── Catalogues ─────────────────────────────────────────────────────────────
+
 const PRODUCT_TOKENS: Record<string, number> = {
   'com.symponia.tokens50':  50,
   'com.symponia.tokens150': 150,
@@ -23,37 +33,53 @@ const PRODUCT_TOKENS: Record<string, number> = {
 const SUBSCRIPTION_IDS = new Set(['com.symponia.premium.monthly']);
 const SUBSCRIPTION_TOKENS_PER_PERIOD = 350;
 
-// ── StoreKit 2 JWS decoder ─────────────────────────────────────────────────
-// react-native-iap v14 provides purchase.purchaseToken as a JWS (signed JWT)
-// on iOS. The JWS payload contains the transaction data directly — no Apple
-// API call needed. We decode and trust it (Apple's signature is on it).
-function decodeJWSPayload(jws: string): Record<string, unknown> | null {
-  try {
-    const parts = jws.split('.');
-    if (parts.length !== 3) return null;
-    // base64url → base64 → JSON
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-    return JSON.parse(atob(padded));
-  } catch {
-    return null;
+const ALL_KNOWN_PRODUCT_IDS = new Set([
+  'com.symponia.premium.monthly',
+  'com.symponia.tokens50',
+  'com.symponia.tokens150',
+  'com.symponia.tokens500',
+]);
+
+const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
+const TEN_YEARS_MS = 10 * 365 * 24 * 60 * 60 * 1000;
+
+// ── StoreKit 2 JWS verifier ────────────────────────────────────────────────
+// Cryptographically verifies signature then validates payload fields.
+// Throws with a safe-to-log message on any failure.
+async function verifyAndExtractJWSPayload(jws: string): Promise<{
+  productId: string;
+  expiresDateMs?: number;
+  originalTransactionId?: string;
+}> {
+  const rawPayload = (await verifyAppleJWS(jws)) as Record<string, unknown>;
+
+  const productId = rawPayload.productId as string | undefined;
+  if (!productId || !ALL_KNOWN_PRODUCT_IDS.has(productId)) {
+    throw new Error(`Unknown productId: ${String(productId)}`);
   }
-}
 
-function verifyFromJWS(jws: string) {
-  const payload = decodeJWSPayload(jws);
-  if (!payload) return { valid: false };
-
-  const productId = payload.productId as string | undefined;
-  if (!productId) return { valid: false };
-
-  // expiresDate is Unix timestamp in milliseconds for subscriptions
-  const expiresDateMs = payload.expiresDate as number | undefined;
   const originalTransactionId = (
-    payload.originalTransactionId ?? payload.transactionId
+    rawPayload.originalTransactionId ?? rawPayload.transactionId
   ) as string | undefined;
 
-  return { valid: true, productId, expiresDateMs, originalTransactionId };
+  const expiresDateMs = rawPayload.expiresDate as number | undefined;
+
+  if (SUBSCRIPTION_IDS.has(productId)) {
+    if (!originalTransactionId) {
+      throw new Error('Subscription JWS missing originalTransactionId');
+    }
+    if (typeof expiresDateMs !== 'number' || expiresDateMs <= 0) {
+      throw new Error('Subscription JWS missing or invalid expiresDate');
+    }
+    if (expiresDateMs < Date.now() - NINETY_DAYS_MS) {
+      throw new Error(`Subscription expiresDate expired more than 90 days ago: ${expiresDateMs}`);
+    }
+    if (expiresDateMs > Date.now() + TEN_YEARS_MS) {
+      throw new Error(`Subscription expiresDate absurdly far in future: ${expiresDateMs}`);
+    }
+  }
+
+  return { productId, expiresDateMs, originalTransactionId };
 }
 
 // ── Apple legacy receipt verification (StoreKit 1) ─────────────────────────
@@ -97,18 +123,19 @@ async function verifyAppleReceipt(receiptData: string, sharedSecret: string) {
 }
 
 // ── Handler ────────────────────────────────────────────────────────────────
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: CORS });
 
-  // ── Authenticate the caller via JWT ──────────────────────────────────────
+  try {
+  // ── Authenticate caller ───────────────────────────────────────────────────
   const authHeader = req.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
-    return new Response('Unauthorized', { status: 401, headers: CORS });
+    return jsonRes({ error: 'unauthorized' }, 401);
   }
-  const jwt = authHeader.replace('Bearer ', '');
+  const jwt = authHeader.slice('Bearer '.length).trim();
 
-  // Use service role client to verify the user JWT
   const adminClient = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -116,7 +143,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: { user }, error: authError } = await adminClient.auth.getUser(jwt);
   if (authError || !user) {
-    return new Response('Unauthorized', { status: 401, headers: CORS });
+    return jsonRes({ error: 'unauthorized' }, 401);
   }
   const userId = user.id;
 
@@ -125,30 +152,58 @@ Deno.serve(async (req: Request) => {
   try {
     body = await req.json();
   } catch {
-    return new Response('Invalid JSON', { status: 400, headers: CORS });
+    return jsonRes({ error: 'invalid_json' }, 400);
   }
 
   const { receipt, product_id, is_subscription } = body;
   if (!receipt || !product_id) {
-    return new Response('Missing receipt or product_id', { status: 400, headers: CORS });
+    return jsonRes({ error: 'missing_fields' }, 400);
   }
 
-  // ── Verify receipt — JWS (StoreKit 2) or legacy base64 receipt ───────────
-  // JWS tokens from react-native-iap v14: three dot-separated base64url segments
+  // ── Verify receipt ────────────────────────────────────────────────────────
   const isJWS = receipt.split('.').length === 3 && !receipt.includes('\n');
-  let result: { valid: boolean; productId?: string; expiresDateMs?: number; originalTransactionId?: string };
+  let result: {
+    valid: boolean;
+    productId?: string;
+    expiresDateMs?: number;
+    originalTransactionId?: string;
+  };
+  let verificationPath: 'jws' | 'legacy';
 
   if (isJWS) {
-    result = verifyFromJWS(receipt);
-    console.log(`[verify-receipt] JWS path — valid:${result.valid} product:${result.productId}`);
+    verificationPath = 'jws';
+    try {
+      const extracted = await verifyAndExtractJWSPayload(receipt);
+      result = { valid: true, ...extracted };
+      console.log(`[verify-receipt] JWS verified — product:${result.productId} user:${userId}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[verify-receipt] JWS verification failed:', msg);
+      adminClient.from('apple_webhook_log').insert({
+        notification_type: 'VERIFY_RECEIPT_FAILED',
+        subtype: 'jws',
+        original_transaction_id: null,
+        payload: { user_id: userId, product_id, error: msg },
+        error: msg,
+      }).then(null, () => {});
+      return jsonRes({ error: 'invalid_receipt' }, 400);
+    }
   } else {
+    verificationPath = 'legacy';
     const sharedSecret = Deno.env.get('APPLE_SHARED_SECRET')!;
     result = await verifyAppleReceipt(receipt, sharedSecret);
-    console.log(`[verify-receipt] legacy receipt path — valid:${result.valid}`);
+    console.log(`[verify-receipt] legacy path — valid:${result.valid}`);
   }
 
   if (!result.valid) {
-    return new Response('Invalid receipt', { status: 400, headers: CORS });
+    adminClient.from('apple_webhook_log').insert({
+      notification_type: 'VERIFY_RECEIPT_FAILED',
+      subtype: verificationPath,
+      original_transaction_id: null,
+      payload: { user_id: userId, product_id },
+      error: 'invalid_receipt',
+    }).then(null, () => {});
+    return jsonRes({ error: 'invalid_receipt' }, 400);
   }
 
   const verifiedId = result.productId ?? product_id;
@@ -156,16 +211,38 @@ Deno.serve(async (req: Request) => {
   // ── Subscription ──────────────────────────────────────────────────────────
   if (is_subscription || SUBSCRIPTION_IDS.has(verifiedId)) {
     if (!result.expiresDateMs) {
-      return new Response('No expiry in receipt', { status: 400, headers: CORS });
+      return jsonRes({ error: 'invalid_receipt' }, 400);
     }
 
     const expiresAt = new Date(result.expiresDateMs).toISOString();
     const originalTxId: string | undefined = result.originalTransactionId ?? undefined;
 
-    // Idempotency: fetch existing profile to detect replays.
-    // A new billing period is identified by expiresAt moving forward.
-    // If the stored expiry already equals or exceeds the incoming one, the
-    // token reset for this period was already applied — skip it.
+    // Cross-user conflict: same originalTransactionId claimed by a different account
+    if (originalTxId) {
+      const { data: conflictRow } = await adminClient
+        .from('profiles')
+        .select('user_id')
+        .eq('original_transaction_id', originalTxId)
+        .maybeSingle();
+
+      if (conflictRow && conflictRow.user_id !== userId) {
+        console.error('[verify-receipt] transaction_conflict:', {
+          existing_user: conflictRow.user_id,
+          claiming_user: userId,
+          txId: originalTxId,
+        });
+        adminClient.from('apple_webhook_log').insert({
+          notification_type: 'VERIFY_RECEIPT_CONFLICT',
+          subtype: null,
+          original_transaction_id: originalTxId,
+          payload: { claiming_user: userId, existing_user: conflictRow.user_id, product_id: verifiedId },
+          error: 'transaction_conflict',
+        }).then(null, () => {});
+        return jsonRes({ error: 'transaction_conflict' }, 409);
+      }
+    }
+
+    // Idempotency: only reset tokens when the billing period genuinely advances
     const { data: existingProfile } = await adminClient
       .from('profiles')
       .select('subscription_expires_at')
@@ -195,19 +272,29 @@ Deno.serve(async (req: Request) => {
 
     if (error) {
       console.error('subscription upsert failed:', error);
-      return new Response('DB error', { status: 500, headers: CORS });
+      return jsonRes({ error: 'db_error' }, 500);
     }
 
-    return new Response(
-      JSON.stringify({ type: 'subscription', expires_at: expiresAt }),
-      { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } },
-    );
+    adminClient.from('apple_webhook_log').insert({
+      notification_type: 'VERIFY_RECEIPT',
+      subtype: isNewBillingPeriod ? 'new_period' : 'replay',
+      original_transaction_id: originalTxId ?? null,
+      payload: {
+        user_id: userId,
+        product_id: verifiedId,
+        expires_at: expiresAt,
+        verification_path: verificationPath,
+      },
+      error: null,
+    }).then(null, () => {});
+
+    return jsonRes({ type: 'subscription', expires_at: expiresAt }, 200);
   }
 
-  // ── Unknown / legacy product ──────────────────────────────────────────────
+  // ── Consumable ────────────────────────────────────────────────────────────
   const tokensToAdd = PRODUCT_TOKENS[verifiedId] ?? 0;
   if (tokensToAdd === 0) {
-    return new Response('Unknown product', { status: 400, headers: CORS });
+    return jsonRes({ error: 'unknown_product' }, 400);
   }
 
   const { error } = await adminClient.rpc('add_tokens', {
@@ -217,12 +304,28 @@ Deno.serve(async (req: Request) => {
 
   if (error) {
     console.error('add_tokens failed:', error);
-    return new Response('DB error', { status: 500, headers: CORS });
+    return jsonRes({ error: 'db_error' }, 500);
   }
 
+  adminClient.from('apple_webhook_log').insert({
+    notification_type: 'VERIFY_RECEIPT',
+    subtype: 'consumable',
+    original_transaction_id: result.originalTransactionId ?? null,
+    payload: {
+      user_id: userId,
+      product_id: verifiedId,
+      tokens_added: tokensToAdd,
+      verification_path: verificationPath,
+    },
+    error: null,
+  }).then(null, () => {});
+
   console.log(`+${tokensToAdd} tokens → user ${userId} (${verifiedId})`);
-  return new Response(
-    JSON.stringify({ type: 'consumable', tokens_added: tokensToAdd }),
-    { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } },
-  );
+  return jsonRes({ type: 'consumable', tokens_added: tokensToAdd }, 200);
+
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[verify-receipt] Unexpected error:', msg);
+    return jsonRes({ error: 'internal_error' }, 500);
+  }
 });

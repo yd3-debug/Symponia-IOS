@@ -1,5 +1,6 @@
 import { SUPABASE_URL } from '@/constants/config';
 import { supabase } from './supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Keep only the last MAX_HISTORY_TURNS user+assistant pairs to bound input tokens.
 const MAX_HISTORY_TURNS = 10; // 10 user + 10 assistant = 20 messages max
@@ -37,15 +38,21 @@ function streamSSE(
   body: object,
   onToken: (token: string) => void,
   onComplete: (full: string) => void,
-  onError: (msg: string) => void
+  onError?: (err: Error) => void,
 ): () => void {
   let aborted = false;
   const noStreamBody = { ...(body as Record<string, unknown>), stream: false };
 
   (async () => {
+    const consent = await AsyncStorage.getItem('symponia_ai_consent');
+    if (consent !== 'true') {
+      onError?.(new Error('AI_CONSENT_REQUIRED'));
+      return;
+    }
+
     const token = await getValidToken();
     if (!token) {
-      onError('Session expired. Please sign in again.');
+      onError?.(new Error('Session expired. Please sign in again.'));
       onComplete('Session expired. Please sign in again.');
       return;
     }
@@ -65,11 +72,11 @@ function streamSSE(
       if (aborted) return;
       if (!res.ok) {
         const err = await res.text().catch(() => '');
-        
+
         // If Edge function tells us the token is dead or user is deleted, force log out.
         if (err.includes('Auth failed') || err.includes('Unauthorized') || err.includes('missing sub claim')) {
           supabase.auth.signOut().then(() => {
-            onError('Session corrupted. Logging you out...');
+            onError?.(new Error('Session corrupted. Logging you out...'));
             onComplete('Session corrupted. Logging you out...');
             // Need to require router inline to avoid circular dependencies if any
             const { router } = require('expo-router');
@@ -78,7 +85,7 @@ function streamSSE(
           return;
         }
 
-        onError(`The current shifted. (${res.status}) ${err}`.trim());
+        onError?.(new Error(`The current shifted. (${res.status}) ${err}`.trim()));
         return;
       }
       const json = await res.json();
@@ -86,7 +93,7 @@ function streamSSE(
       onToken(text);
       onComplete(text);
     } catch {
-      if (!aborted) onError('The current shifted. Network unreachable.');
+      if (!aborted) onError?.(new Error('The current shifted. Network unreachable.'));
     }
   })();
 
@@ -100,6 +107,7 @@ export function streamChat(
   mode: string,
   onToken: (token: string) => void,
   onComplete: (full: string) => void,
+  onError?: (err: Error) => void,
 ): () => void {
   // Trim to the last MAX_HISTORY_TURNS pairs before appending the new message.
   const trimmed = history.slice(-MAX_HISTORY_TURNS * 2);
@@ -117,8 +125,13 @@ export function streamChat(
   };
 
   return streamSSE(body, onToken, onComplete, (err) => {
-    onToken(err);
-    onComplete(err);
+    if (err.message === 'AI_CONSENT_REQUIRED') {
+      onError?.(err);
+      onComplete('');
+      return;
+    }
+    onToken(err.message);
+    onComplete(err.message);
   });
 }
 
@@ -146,6 +159,9 @@ export async function generateDailyReflection(
 ): Promise<string> {
   const token = await getValidToken();
   if (!token) throw new Error('Session expired');
+
+  const consent = await AsyncStorage.getItem('symponia_ai_consent');
+  if (consent !== 'true') throw new Error('AI_CONSENT_REQUIRED');
 
   const dateStr = targetDate.toISOString().slice(0, 10);
   const body = {
@@ -183,6 +199,7 @@ export function streamAnimalSynthesis(
   animals: string[], // session animals — used for exploration, oracle prefers these over profile
   onToken: (token: string) => void,
   onComplete: () => void,
+  onError?: (err: Error) => void,
 ): () => void {
   const body = {
     model: 'claude-sonnet-4-6',
@@ -192,7 +209,12 @@ export function streamAnimalSynthesis(
   };
 
   return streamSSE(body, onToken, () => onComplete(), (err) => {
-    onToken(err);
+    if (err.message === 'AI_CONSENT_REQUIRED') {
+      onError?.(err);
+      onComplete();
+      return;
+    }
+    onToken(err.message);
     onComplete();
   });
 }
@@ -203,6 +225,7 @@ export function streamArchetype(
   mode: string,
   onToken: (token: string) => void,
   onComplete: () => void,
+  onError?: (err: Error) => void,
 ): () => void {
   const body = {
     model: 'claude-sonnet-4-6',
@@ -213,7 +236,12 @@ export function streamArchetype(
   };
 
   return streamSSE(body, onToken, (_full) => onComplete(), (err) => {
-    onToken(err);
+    if (err.message === 'AI_CONSENT_REQUIRED') {
+      onError?.(err);
+      onComplete();
+      return;
+    }
+    onToken(err.message);
     onComplete();
   });
 }

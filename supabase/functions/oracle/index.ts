@@ -65,11 +65,41 @@ Deno.serve(async (req: Request) => {
     return jsonError('Invalid JSON', 'BAD_REQUEST', 400);
   }
 
+  // A3/B5: enforce model allowlist, cap max_tokens, limit message volume
+  const ALLOWED_MODELS = new Set(['claude-sonnet-4-6', 'claude-haiku-4-5-20251001']);
+  body.model = (typeof body.model === 'string' && ALLOWED_MODELS.has(body.model))
+    ? body.model
+    : 'claude-sonnet-4-6';
+  body.max_tokens = Math.min(typeof body.max_tokens === 'number' ? body.max_tokens : 500, 750);
+
+  if (Array.isArray(body.messages) && body.messages.length > 25) {
+    return jsonError('Too many messages', 'TOO_MANY_MESSAGES', 400);
+  }
+  const totalContentLen = Array.isArray(body.messages)
+    ? body.messages.reduce((s: number, m: any) => s + String(m.content ?? '').length, 0)
+    : 0;
+  if (totalContentLen > 50000) {
+    return jsonError('Content too large', 'CONTENT_TOO_LARGE', 400);
+  }
+
   // ── Admin client (service role) — used by both paths ─────────────────────
   const admin = createClient(
     Deno.env.get('SUPABASE_URL') || '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
   );
+
+  // ── Consent gate ───────────────────────────────────────────────────────────
+  // Structural enforcement: any user whose profiles.ai_consent is not strictly
+  // true is refused — this fires before every mode, including daily-reflection.
+  const { data: consentProfile, error: consentErr } = await admin
+    .from('profiles')
+    .select('ai_consent')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (consentErr || !consentProfile || consentProfile.ai_consent !== true) {
+    return jsonError('consent required', 'consent_required', 403);
+  }
 
   // ── Daily-reflection fast path ────────────────────────────────────────────
   // Token deduction bypassed for this mode. Authentication still required (above).

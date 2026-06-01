@@ -70,6 +70,12 @@ async function maybeTopUpDailyReflections() {
       return;
     }
 
+    const consent = await AsyncStorage.getItem('symponia_ai_consent');
+    if (consent !== 'true') {
+      console.log('[Symponia] Skipping topup — AI consent not given');
+      return;
+    }
+
     // Cost protection: users with 0 tokens who haven't opened the app for 7+ days
     // won't have new reflections generated or scheduled. Resumes automatically on
     // their next app open.
@@ -197,12 +203,18 @@ function AppShell() {
     const syncProfile = async (userId: string) => {
       const { data: profile } = await supabase.from('profiles').select('*').eq('user_id', userId).single();
       if (profile) {
-        await AsyncStorage.multiSet([
+        const entries: [string, string][] = [
           ['symponia_name', profile.name || ''],
           ['symponia_gender', profile.gender || ''],
           ['symponia_frequency', profile.frequency || 'Intellectual'],
           ['symponia_animals', JSON.stringify(profile.animals || [])],
-        ]);
+        ];
+        // Hydrate consent from DB so new-device sign-ins have the correct flag
+        // without re-completing the consent screen.
+        if (typeof profile.ai_consent === 'boolean') {
+          entries.push(['symponia_ai_consent', profile.ai_consent ? 'true' : 'false']);
+        }
+        await AsyncStorage.multiSet(entries);
       }
     };
 
@@ -256,7 +268,7 @@ function AppShell() {
       } else {
         AsyncStorage.setItem('symponia_user_id', session.user.id);
         await ensureProfileRow(session.user);
-        syncProfile(session.user.id);
+        await syncProfile(session.user.id);
         syncTokens().catch(() => {});
         startIAP();
       }
@@ -294,12 +306,12 @@ function AppShell() {
         // SIGNED_IN also fires on token refresh — only wipe local state when a
         // different user signs in on the same device.
         const userId = session.user.id;
-        AsyncStorage.getItem('symponia_user_id').then((storedId) => {
+        AsyncStorage.getItem('symponia_user_id').then(async (storedId) => {
           if (storedId === userId) {
             // Same user — token refresh or re-mount. Just sync, don't wipe.
             startIAP(); // no-op if already running
             ensureProfileRow(session.user).catch(() => {});
-            syncProfile(userId);
+            await syncProfile(userId).catch(() => {});
             syncTokens().catch(() => {});
           } else {
             console.log(`[Auth] User changed (${storedId ?? 'none'} → ${userId}) — clearing local state`);
@@ -316,6 +328,8 @@ function AppShell() {
               'symponia_subscribed',
               'symponia_push_token',
               'symponia_last_reset_seen',
+              'symponia_ai_consent',
+              'symponia_active_mode',
             ])
               .then(() => AsyncStorage.setItem('symponia_user_id', userId))
               .then(() => { stopIAP(); startIAP(); }) // re-init for new user's session

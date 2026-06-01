@@ -15,6 +15,7 @@ import * as Notifications from 'expo-notifications';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Dimensions,
   Keyboard,
   Linking,
@@ -299,6 +300,14 @@ function AnimalReadingView({ animals, onAskMore, onWordLongPress }: { animals: s
       animals,
       (token) => setSynthesis(token),
       () => setSynthLoading(false),
+      (_err) => {
+        setSynthLoading(false);
+        Alert.alert(
+          'AI consent required',
+          'You have not granted permission for AI processing. Enable it in Profile → Data & Account.',
+          [{ text: 'OK' }],
+        );
+      },
     );
     return abort;
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -598,6 +607,17 @@ export default function DialogoScreen() {
   const sendMessage = useCallback(async () => {
     const trimmed = inputText.trim();
     if (!trimmed || isStreaming) return;
+
+    const consent = await AsyncStorage.getItem('symponia_ai_consent');
+    if (consent !== 'true') {
+      Alert.alert(
+        'AI consent required',
+        'You have not granted permission for AI processing. Enable it in Profile → Data & Account.',
+        [{ text: 'OK' }],
+      );
+      return;
+    }
+
     if (tokens <= 0) {
       if (isSubscribed) {
         setShowSubscriberEmpty(true);
@@ -648,6 +668,8 @@ export default function DialogoScreen() {
       async (full) => {
         clearInterval(heartbeat);
         setIsStreaming(false);
+        if (!full) return;
+
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
         // Deduct one token for every response
@@ -679,7 +701,17 @@ export default function DialogoScreen() {
         const existing = await AsyncStorage.getItem('symponia_echo_nodes');
         const parsed: EchoNodeData[] = existing ? JSON.parse(existing) : [];
         await AsyncStorage.setItem('symponia_echo_nodes', JSON.stringify([...parsed, node]));
-      }
+      },
+      (err) => {
+        if (err.message === 'AI_CONSENT_REQUIRED') {
+          setMessages((prev) => prev.filter((m) => m.id !== botId));
+          Alert.alert(
+            'AI consent required',
+            'You have not granted permission for AI processing. Enable it in Profile → Data & Account.',
+            [{ text: 'OK' }],
+          );
+        }
+      },
     );
 
     abortRef.current = () => { clearInterval(heartbeat); abort(); };
@@ -698,7 +730,16 @@ export default function DialogoScreen() {
     let accumulated = '';
     streamArchetype(word, frequency, currentMode,
       (token) => { accumulated += token; setArchetypeText(accumulated); },
-      () => setArchetypeLoading(false)
+      () => setArchetypeLoading(false),
+      (_err) => {
+        setShowArchetype(false);
+        setArchetypeLoading(false);
+        Alert.alert(
+          'AI consent required',
+          'You have not granted permission for AI processing. Enable it in Profile → Data & Account.',
+          [{ text: 'OK' }],
+        );
+      },
     );
   }, [currentMode]);
 
