@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 20 },
 
   header: { alignItems: 'center', marginBottom: 24 },
-  appName: { fontSize: 14, letterSpacing: 8, fontFamily: FONT, fontWeight: '300' },
+  appName: { fontSize: 14, letterSpacing: 8, fontFamily: FONT, fontWeight: '400' },
 
   divider: { height: 0.5, marginBottom: 18 },
 
@@ -435,9 +435,9 @@ const styles = StyleSheet.create({
   dailyCardInner: { paddingHorizontal: 20, paddingVertical: 18, gap: 8 },
   dailyTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   dailyLabel: { fontSize: 9, letterSpacing: 3, fontFamily: FONT, fontWeight: '500' },
-  dailyTeaser: { fontSize: 14, fontFamily: FONT, fontWeight: '300', lineHeight: 21, letterSpacing: 0.2 },
+  dailyTeaser: { fontSize: 14, fontFamily: FONT, fontWeight: '400', lineHeight: 21, letterSpacing: 0.2 },
 
-  prompt: { fontSize: 11, fontFamily: FONT, fontWeight: '300', letterSpacing: 1, textAlign: 'center', marginBottom: 20 },
+  prompt: { fontSize: 11, fontFamily: FONT, fontWeight: '400', letterSpacing: 1, textAlign: 'center', marginBottom: 20 },
 
   cards: { gap: 12, marginBottom: 32 },
   card: { borderRadius: 20, overflow: 'hidden', borderWidth: 0.5 },
@@ -447,11 +447,11 @@ const styles = StyleSheet.create({
   cardGlyph: { fontSize: 28, width: 38, textAlign: 'center', lineHeight: 34 },
   cardBody: { flex: 1, gap: 5 },
   cardTitle: { fontSize: 10, letterSpacing: 2.5, fontFamily: FONT, fontWeight: '500' },
-  cardSubtitle: { fontSize: 13, fontFamily: FONT, fontWeight: '300', lineHeight: 19 },
+  cardSubtitle: { fontSize: 13, fontFamily: FONT, fontWeight: '400', lineHeight: 19 },
   cardChevron: { fontSize: 22 },
 
   footerBar: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', paddingTop: 10 },
-  footer: { textAlign: 'center', fontSize: 12, fontFamily: FONT, fontWeight: '300', letterSpacing: 0.5 },
+  footer: { textAlign: 'center', fontSize: 12, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.5 },
 });
 
 // ── Tooltip styles ────────────────────────────────────────────────────────────
@@ -503,7 +503,7 @@ const tStyles = StyleSheet.create({
   body: {
     fontSize: 14,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     lineHeight: 21,
     letterSpacing: 0.2,
   },
@@ -515,7 +515,7 @@ const tStyles = StyleSheet.create({
   skip: {
     fontSize: 11,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.8,
   },
   nextBtn: {

@@ -261,42 +261,70 @@ const ANIMAL_STAGES = [
   },
 ] as const;
 
-function AnimalsStep({ colors, animals, setAnimals, onNext }: {
-  colors: any; animals: string[]; setAnimals: (v: string[]) => void; onNext: () => void;
+function AnimalsStep({ colors, animals, setAnimals, cols, setCols, onNext, onBack }: {
+  colors: any; animals: string[]; setAnimals: (v: string[]) => void;
+  cols: number; setCols: (v: number) => void;
+  onNext: () => void; onBack: () => void;
 }) {
-  // stage 0 = dominant, stage 1 = middle 5, stage 2 = shadow
-  const [stage, setStage] = React.useState(0);
-  const [stagePicked, setStagePicked] = React.useState<string[]>([]);
+  // stage 0 = dominant, stage 1 = middle 5, stage 2 = shadow.
+  // Progress is reconstructed from the committed flat array so going back —
+  // within stages OR returning to this step later — restores prior picks, editable.
+  const [stage, setStage] = React.useState(() =>
+    animals.length >= 6 ? 2 : animals.length >= 1 ? 1 : 0,
+  );
+  const [picks, setPicks] = React.useState<string[][]>(() => [
+    animals.slice(0, 1),
+    animals.slice(1, 6),
+    animals.slice(6, 7),
+  ]);
 
   const config = ANIMAL_STAGES[stage];
+  const need = config.need;
+  const current = picks[stage];
 
-  // Animals already committed in previous stages — hide them from the grid
-  const committed = animals; // parent array grows as stages complete
-  const visible = ANIMALS.filter((a) => !committed.includes(a.name));
+  // Hide animals chosen in OTHER stages; current-stage picks stay shown + selected.
+  const otherChosen = picks.flatMap((p, i) => (i === stage ? [] : p));
+  const visible = ANIMALS.filter((a) => !otherChosen.includes(a.name));
 
-  const canAdvance = stagePicked.length === config.need;
+  const canAdvance = current.length === need;
+
+  // Dynamic cell size drives the 4-col ⇄ 2-col toggle.
+  const large = cols === 2;
+  const cellSize = (SCREEN_W - H_PAD * 2 - CELL_GAP * (cols - 1)) / cols;
+
+  const setCurrent = (next: string[]) =>
+    setPicks((prev) => prev.map((p, i) => (i === stage ? next : p)));
+
+  const commit = (p: string[][]) => setAnimals([...p[0], ...p[1], ...p[2]]);
 
   const toggle = (name: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (stagePicked.includes(name)) {
-      setStagePicked(stagePicked.filter((a) => a !== name));
-    } else if (stagePicked.length < config.need) {
-      setStagePicked([...stagePicked, name]);
-    }
+    if (current.includes(name)) setCurrent(current.filter((a) => a !== name));
+    else if (current.length < need) setCurrent([...current, name]);
   };
 
   const advance = () => {
     if (!canAdvance) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const next = [...animals, ...stagePicked];
-    setAnimals(next);
-    setStagePicked([]);
-    if (stage < 2) {
-      setStage(stage + 1);
-    } else {
-      onNext();
-    }
+    commit(picks);
+    if (stage < 2) setStage(stage + 1);
+    else onNext();
   };
+
+  const goBack = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    commit(picks);
+    if (stage > 0) setStage(stage - 1);
+    else onBack();
+  };
+
+  const toggleGrid = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setCols(large ? 4 : 2);
+  };
+
+  const filledBefore = picks.slice(0, stage).reduce((n, p) => n + p.length, 0);
+  const activeNow = current.length;
 
   return (
     <Animated.View key={stage} entering={FadeIn.duration(350)} style={styles.stepWrap}>
@@ -308,55 +336,66 @@ function AnimalsStep({ colors, animals, setAnimals, onNext }: {
         <Text style={[styles.stepHint, { color: colors.textDim }]}>
           {config.hint}
         </Text>
-        {/* 7 dots showing total progress across all stages */}
-        <View style={styles.animalDots}>
-          {Array.from({ length: 7 }).map((_, i) => {
-            const committed = animals.length;
-            const inProgress = committed + stagePicked.length;
-            const filled = i < committed;
-            const active = i >= committed && i < inProgress;
-            return (
-              <View
-                key={i}
-                style={[
-                  styles.animalDot,
-                  filled && { backgroundColor: colors.cyan, opacity: 1 },
-                  active && { backgroundColor: colors.cyan, opacity: 0.5 },
-                  !filled && !active && { backgroundColor: colors.glassBorder, opacity: 1 },
-                ]}
-              />
-            );
-          })}
+
+        {/* progress dots + grid-size toggle */}
+        <View style={styles.animalTopRow}>
+          <View style={styles.animalDots}>
+            {Array.from({ length: 7 }).map((_, i) => {
+              const filled = i < filledBefore;
+              const active = i >= filledBefore && i < filledBefore + activeNow;
+              return (
+                <View
+                  key={i}
+                  style={[
+                    styles.animalDot,
+                    filled && { backgroundColor: colors.cyan, opacity: 1 },
+                    active && { backgroundColor: colors.cyan, opacity: 0.5 },
+                    !filled && !active && { backgroundColor: colors.glassBorder, opacity: 1 },
+                  ]}
+                />
+              );
+            })}
+          </View>
+          <TouchableOpacity
+            onPress={toggleGrid}
+            hitSlop={8}
+            activeOpacity={0.7}
+            style={[styles.gridToggle, { borderColor: colors.glassBorder }]}
+          >
+            <Text style={[styles.gridToggleText, { color: colors.textSub }]}>
+              {large ? '▦  smaller' : '▣  larger'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.animalGrid}>
         {visible.map((a) => {
-          const selected = stagePicked.includes(a.name);
-          const rank = stagePicked.indexOf(a.name) + 1;
+          const selected = current.includes(a.name);
+          const rank = current.indexOf(a.name) + 1;
           return (
             <TouchableOpacity
               key={a.name}
               style={[
                 styles.animalCell,
-                { borderColor: selected ? colors.cyanBorder : colors.glassBorder },
+                { width: cellSize, height: cellSize, borderColor: selected ? colors.cyanBorder : colors.glassBorder },
                 selected && { backgroundColor: colors.cyanDim },
               ]}
               onPress={() => toggle(a.name)}
               activeOpacity={0.7}
             >
-              {selected && config.need > 1 && (
+              {selected && need > 1 && (
                 <View style={[styles.rankBadge, { backgroundColor: colors.cyan }]}>
                   <Text style={styles.rankText}>{rank}</Text>
                 </View>
               )}
-              {selected && config.need === 1 && (
+              {selected && need === 1 && (
                 <View style={[styles.rankBadge, { backgroundColor: colors.cyan }]}>
                   <Text style={styles.rankText}>✓</Text>
                 </View>
               )}
-              <Text style={styles.animalEmoji}>{a.emoji}</Text>
-              <Text style={[styles.animalName, { color: selected ? colors.text : colors.textDim }]}>
+              <Text style={[styles.animalEmoji, large && styles.animalEmojiLarge]}>{a.emoji}</Text>
+              <Text style={[styles.animalName, large && styles.animalNameLarge, { color: selected ? colors.text : colors.textSub }]}>
                 {a.name.toLowerCase()}
               </Text>
             </TouchableOpacity>
@@ -364,9 +403,9 @@ function AnimalsStep({ colors, animals, setAnimals, onNext }: {
         })}
       </View>
 
-      {config.need > 1 && (
-        <Text style={[styles.animalCount, { color: stagePicked.length === config.need ? colors.cyan : colors.textDim }]}>
-          {stagePicked.length} / {config.need}
+      {need > 1 && (
+        <Text style={[styles.animalCount, { color: current.length === need ? colors.cyan : colors.textDim }]}>
+          {current.length} / {need}
         </Text>
       )}
 
@@ -383,6 +422,12 @@ function AnimalsStep({ colors, animals, setAnimals, onNext }: {
       >
         <Text style={[styles.primaryBtnText, { color: canAdvance ? colors.cyan : colors.textDim }]}>
           {config.btnLabel}
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={goBack} activeOpacity={0.65} style={styles.animalBackBtn}>
+        <Text style={[styles.animalBackText, { color: colors.textDim }]}>
+          {stage > 0 ? '← back' : '← previous step'}
         </Text>
       </TouchableOpacity>
     </Animated.View>
@@ -639,6 +684,7 @@ export default function OnboardingScreen() {
   const [name, setName] = useState('');
   const [gender, setGender] = useState('');
   const [animals, setAnimals] = useState<string[]>([]);
+  const [animalCols, setAnimalCols] = useState(4);
   const [depth, setDepth] = useState<Frequency>('Intellectual');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -777,7 +823,7 @@ export default function OnboardingScreen() {
         {step === 'welcome' && <WelcomeStep key="welcome" colors={colors} onNext={goNext} />}
         {step === 'name'    && <NameStep key="name" colors={colors} name={name} setName={setName} onNext={goNext} />}
         {step === 'gender'  && <GenderStep key="gender" colors={colors} gender={gender} setGender={setGender} onNext={goNext} />}
-        {step === 'animals' && <AnimalsStep key="animals" colors={colors} animals={animals} setAnimals={setAnimals} onNext={goNext} />}
+        {step === 'animals' && <AnimalsStep key="animals" colors={colors} animals={animals} setAnimals={setAnimals} cols={animalCols} setCols={setAnimalCols} onNext={goNext} onBack={() => setStep('gender')} />}
         {step === 'depth'   && <DepthStep key="depth" colors={colors} depth={depth} setDepth={setDepth} onNext={goNext} />}
         {step === 'legal'   && (
           <LegalStep
@@ -955,18 +1001,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 8,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
   },
   tagline: {
     fontSize: 15,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.3,
   },
   taglineSub: {
     fontSize: 12,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.5,
     marginBottom: 4,
     opacity: 0.7,
@@ -974,7 +1020,7 @@ const styles = StyleSheet.create({
   welcomeBody: {
     fontSize: 14,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     textAlign: 'center',
     lineHeight: 22,
     marginTop: 8,
@@ -986,7 +1032,7 @@ const styles = StyleSheet.create({
   signInLinkText: {
     fontSize: 13,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.2,
   },
 
@@ -1001,14 +1047,14 @@ const styles = StyleSheet.create({
   stepQuestion: {
     fontSize: 28,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     lineHeight: 36,
     letterSpacing: -0.3,
   },
   stepHint: {
     fontSize: 12,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     lineHeight: 18,
   },
 
@@ -1016,7 +1062,7 @@ const styles = StyleSheet.create({
   nameInput: {
     fontSize: 22,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     borderBottomWidth: 0.5,
     paddingVertical: 8,
     paddingHorizontal: 2,
@@ -1073,7 +1119,7 @@ const styles = StyleSheet.create({
   depthDesc: {
     fontSize: 11,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.3,
     paddingLeft: 32,
   },
@@ -1085,8 +1131,6 @@ const styles = StyleSheet.create({
     gap: CELL_GAP,
   },
   animalCell: {
-    width: CELL_SIZE,
-    height: CELL_SIZE,
     borderRadius: 14,
     borderWidth: 0.5,
     alignItems: 'center',
@@ -1098,11 +1142,19 @@ const styles = StyleSheet.create({
     fontSize: 28,
     lineHeight: 34,
   },
+  animalEmojiLarge: {
+    fontSize: 56,
+    lineHeight: 66,
+  },
   animalName: {
     fontSize: 9,
     fontFamily: FONT,
     fontWeight: '400',
     letterSpacing: 0.2,
+  },
+  animalNameLarge: {
+    fontSize: 14,
+    letterSpacing: 0.4,
   },
   rankBadge: {
     position: 'absolute',
@@ -1126,7 +1178,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 1,
     textAlign: 'center',
-    fontWeight: '300',
+    fontWeight: '400',
   },
   animalDots: {
     flexDirection: 'row',
@@ -1137,6 +1189,35 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
+  },
+  animalTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  gridToggle: {
+    borderWidth: 0.5,
+    borderRadius: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+  },
+  gridToggleText: {
+    fontSize: 11,
+    fontFamily: FONT,
+    fontWeight: '400',
+    letterSpacing: 0.4,
+  },
+  animalBackBtn: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    marginTop: -2,
+  },
+  animalBackText: {
+    fontSize: 12,
+    fontFamily: FONT,
+    fontWeight: '400',
+    letterSpacing: 0.3,
   },
 
   authError: {
@@ -1242,7 +1323,7 @@ const styles = StyleSheet.create({
   gdprNote: {
     fontSize: 10,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.3,
     lineHeight: 16,
     textAlign: 'center',
@@ -1279,14 +1360,14 @@ const styles = StyleSheet.create({
   aiConsentBody: {
     fontSize: 14,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     lineHeight: 22,
     letterSpacing: 0.1,
   },
   aiConsentLinks: {
     fontSize: 12,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     lineHeight: 18,
     letterSpacing: 0.2,
   },
@@ -1301,6 +1382,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 3,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
   },
 });

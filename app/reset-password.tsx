@@ -257,9 +257,9 @@ const styles = StyleSheet.create({
 
   header: { gap: 8 },
   glyph:  { fontSize: 44, lineHeight: 52, marginBottom: 8 },
-  title:  { fontSize: 34, fontFamily: FONT, fontWeight: '300', lineHeight: 42, letterSpacing: -0.5 },
-  hint:   { fontSize: 13, fontFamily: FONT, fontWeight: '300', letterSpacing: 0.2, lineHeight: 20, marginTop: 2 },
-  hintText: { fontSize: 13, fontFamily: FONT, fontWeight: '300', letterSpacing: 0.2 },
+  title:  { fontSize: 34, fontFamily: FONT, fontWeight: '400', lineHeight: 42, letterSpacing: -0.5 },
+  hint:   { fontSize: 13, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.2, lineHeight: 20, marginTop: 2 },
+  hintText: { fontSize: 13, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.2 },
 
   form: { gap: 12 },
 
@@ -279,11 +279,11 @@ const styles = StyleSheet.create({
   btnText: { fontSize: 11, letterSpacing: 3, fontFamily: FONT, fontWeight: '500' },
 
   backBtn:  { alignSelf: 'center', paddingVertical: 8 },
-  backText: { fontSize: 12, fontFamily: FONT, fontWeight: '300', letterSpacing: 0.2 },
+  backText: { fontSize: 12, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.2 },
 
   errorText: { fontSize: 12, fontFamily: FONT, color: '#e07070', textAlign: 'center', lineHeight: 18 },
 
   sentCard: { borderRadius: 16, borderWidth: 0.5, padding: 24, alignItems: 'center', gap: 10 },
   sentIcon: { fontSize: 28 },
-  sentText: { fontSize: 14, fontFamily: FONT, fontWeight: '300', textAlign: 'center', lineHeight: 22 },
+  sentText: { fontSize: 14, fontFamily: FONT, fontWeight: '400', textAlign: 'center', lineHeight: 22 },
 });

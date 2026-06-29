@@ -377,13 +377,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 8,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
   },
 
   tagline: {
     fontSize: 15,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.3,
     marginBottom: 4,
   },
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
   bodyText: {
     fontSize: 14,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     textAlign: 'center',
     lineHeight: 22,
     marginTop: 8,
@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
   secondaryBtnText: {
     fontSize: 13,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.2,
   },
 
@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
   formTitle: {
     fontSize: 34,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     lineHeight: 42,
     letterSpacing: -0.5,
   },
@@ -462,7 +462,7 @@ const styles = StyleSheet.create({
   formHint: {
     fontSize: 13,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.2,
     lineHeight: 20,
     marginTop: 2,
@@ -516,7 +516,7 @@ const styles = StyleSheet.create({
   forgotText: {
     fontSize: 12,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.2,
   },
 
@@ -531,7 +531,7 @@ const styles = StyleSheet.create({
   footerNote: {
     fontSize: 13,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     textAlign: 'center',
     letterSpacing: 0.2,
     marginTop: -16,
@@ -552,7 +552,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 8,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
   },
 
   sentCard: {
@@ -568,7 +568,7 @@ const styles = StyleSheet.create({
   sentText: {
     fontSize: 14,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     textAlign: 'center',
     lineHeight: 22,
   },

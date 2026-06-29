@@ -1022,7 +1022,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 7,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
   },
 
   // Card shell
@@ -1045,7 +1045,7 @@ const styles = StyleSheet.create({
   sectionSub: {
     fontSize: 11,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.3,
     marginBottom: 12,
     marginTop: -4,
@@ -1055,7 +1055,7 @@ const styles = StyleSheet.create({
   nameDisplay: {
     fontSize: 18,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.3,
   },
   inlineRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -1063,7 +1063,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     borderBottomWidth: 0.5,
     paddingVertical: 4,
   },
@@ -1072,7 +1072,7 @@ const styles = StyleSheet.create({
   genderValue: {
     fontSize: 14,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
   },
 
   // Frequency
@@ -1097,7 +1097,7 @@ const styles = StyleSheet.create({
   freqOptionDesc: {
     fontSize: 11,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.3,
     paddingLeft: 30,
   },
@@ -1135,7 +1135,7 @@ const styles = StyleSheet.create({
   settingLabel: {
     fontSize: 11,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.5,
   },
 
@@ -1144,7 +1144,7 @@ const styles = StyleSheet.create({
   linkText: {
     fontSize: 13,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.3,
   },
   linkChevron: { fontSize: 18 },
@@ -1164,14 +1164,14 @@ const styles = StyleSheet.create({
   subExpiry: {
     fontSize: 11,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.3,
     marginTop: -10,
   },
   tokenPackNote: {
     fontSize: 10,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.2,
     textAlign: 'center',
   },
@@ -1186,7 +1186,7 @@ const styles = StyleSheet.create({
   subFeatureList: {
     fontSize: 10,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.2,
     lineHeight: 16,
     marginBottom: 10,
@@ -1194,7 +1194,7 @@ const styles = StyleSheet.create({
   subRenewalNote: {
     fontSize: 10,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.2,
     lineHeight: 15,
     marginBottom: 8,
@@ -1230,7 +1230,7 @@ const styles = StyleSheet.create({
   subLegalLink: {
     fontSize: 10,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.3,
   },
   subLegalSep: {
@@ -1274,7 +1274,7 @@ const styles = StyleSheet.create({
   zooCardRank: {
     fontSize: 9,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 1.5,
   },
   zooCardBody: { paddingHorizontal: 14, paddingBottom: 14, gap: 8 },
@@ -1292,7 +1292,7 @@ const styles = StyleSheet.create({
   zooLayerText: {
     fontSize: 12,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     lineHeight: 18,
     letterSpacing: 0.1,
   },
@@ -1354,12 +1354,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 6,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
   },
   footerVersion: {
     fontSize: 10,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.3,
   },
 

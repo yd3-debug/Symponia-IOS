@@ -63,15 +63,16 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  isDark: true,
-  themeId: 'indigo-dark',
-  colors: darkColors as AppColors,
+  isDark: false,
+  themeId: 'pearl-light',
+  colors: pearlColors as AppColors,
   setTheme: () => {},
   toggleTheme: () => {},
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [themeId, setThemeState] = useState<ThemeId>('indigo-dark');
+  // Default to a bright, high-readability theme on first open.
+  const [themeId, setThemeState] = useState<ThemeId>('pearl-light');
 
   useEffect(() => {
     AsyncStorage.getItem('symponia_theme').then((val) => {

@@ -1075,13 +1075,13 @@ const styles = StyleSheet.create({
   emptyHintText: {
     fontSize: 13,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.3,
   },
   emptyHintLang: {
     fontSize: 12,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.8,
     opacity: 0.7,
   },
@@ -1172,7 +1172,7 @@ const styles = StyleSheet.create({
   tokenBody: {
     fontSize: 15,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     lineHeight: 24,
     textAlign: 'center',
   },
@@ -1194,7 +1194,7 @@ const styles = StyleSheet.create({
   tokenDismissText: {
     fontSize: 11,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 1,
   },
 
@@ -1213,7 +1213,7 @@ const styles = StyleSheet.create({
   wordText: {
     fontSize: 15,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     lineHeight: 22,
     textAlign: 'left',
     writingDirection: 'ltr',
@@ -1244,7 +1244,7 @@ const styles = StyleSheet.create({
   languageHint: {
     fontSize: 11,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 1.2,
     textAlign: 'center',
     marginBottom: 6,
@@ -1254,10 +1254,10 @@ const styles = StyleSheet.create({
   inputBg: { ...StyleSheet.absoluteFillObject },
   inputBorderTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 0.5 },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', padding: 10, gap: 10 },
-  textInput: { flex: 1, fontSize: 15, fontFamily: FONT, fontWeight: '300', maxHeight: 100, paddingVertical: 6, paddingHorizontal: 4 },
+  textInput: { flex: 1, fontSize: 15, fontFamily: FONT, fontWeight: '400', maxHeight: 100, paddingVertical: 6, paddingHorizontal: 4 },
   sendBtn: { width: 38, height: 38, borderRadius: 19, borderWidth: 0.5, alignItems: 'center', justifyContent: 'center' },
   sendBtnDisabled: { backgroundColor: 'rgba(255,255,255,0.05)' },
-  sendIcon: { fontSize: 18, fontWeight: '300' },
+  sendIcon: { fontSize: 18, fontWeight: '400' },
 
   // Animal reading view
   animalReading: { gap: 10 },
@@ -1297,7 +1297,7 @@ const styles = StyleSheet.create({
   animalCardNum: {
     fontSize: 28,
     fontFamily: FONT,
-    fontWeight: '200',
+    fontWeight: '400',
     letterSpacing: -1,
     opacity: 0.35,
   },
@@ -1312,7 +1312,7 @@ const styles = StyleSheet.create({
   animalCardName: {
     fontSize: 22,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.3,
   },
   animalCardLayers: {
@@ -1358,7 +1358,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  scrollDownIcon: { fontSize: 18, fontFamily: FONT, fontWeight: '300', lineHeight: 22 },
+  scrollDownIcon: { fontSize: 18, fontFamily: FONT, fontWeight: '400', lineHeight: 22 },
 
   // Help bubble
   helpBubble: {
@@ -1373,7 +1373,7 @@ const styles = StyleSheet.create({
     elevation: 20,
   },
   helpBubbleClose: { alignSelf: 'flex-end', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
-  helpBubbleCloseText: { fontSize: 10, fontFamily: FONT, fontWeight: '300', letterSpacing: 0.5 },
+  helpBubbleCloseText: { fontSize: 10, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.5 },
   helpRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1385,12 +1385,12 @@ const styles = StyleSheet.create({
   helpRowIcon: { fontSize: 14, width: 18, textAlign: 'center', marginTop: 1 },
   helpRowBody: { flex: 1, gap: 3 },
   helpRowLabel: { fontSize: 12, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.2 },
-  helpRowDesc: { fontSize: 11, fontFamily: FONT, fontWeight: '300', lineHeight: 16, letterSpacing: 0.1 },
+  helpRowDesc: { fontSize: 11, fontFamily: FONT, fontWeight: '400', lineHeight: 16, letterSpacing: 0.1 },
 
   animalCardLayerText: {
     fontSize: 12,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     lineHeight: 18,
   },
   synthesisCard: {
@@ -1411,7 +1411,7 @@ const styles = StyleSheet.create({
   synthesisText: {
     fontSize: 14,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     lineHeight: 22,
     letterSpacing: 0.1,
   },
@@ -1419,7 +1419,7 @@ const styles = StyleSheet.create({
   animalReadingFooter: {
     fontSize: 11,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.3,
     textAlign: 'center',
     paddingVertical: 8,
@@ -1444,6 +1444,6 @@ const styles = StyleSheet.create({
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   sheetWord: { fontSize: 10, letterSpacing: 4, fontFamily: FONT, fontWeight: '500', opacity: 0.75 },
   sheetScroll: { flex: 1 },
-  sheetText: { fontSize: 15, fontFamily: FONT, fontWeight: '300', lineHeight: 24 },
-  sheetCloseText: { fontSize: 11, letterSpacing: 2, fontFamily: FONT, fontWeight: '300' },
+  sheetText: { fontSize: 15, fontFamily: FONT, fontWeight: '400', lineHeight: 24 },
+  sheetCloseText: { fontSize: 11, letterSpacing: 2, fontFamily: FONT, fontWeight: '400' },
 });

@@ -281,20 +281,20 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 0.5,
   },
-  back: { fontSize: 14, fontFamily: FONT, fontWeight: '300', letterSpacing: 0.3 },
+  back: { fontSize: 14, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.3 },
 
   scroll: { paddingHorizontal: 20, paddingTop: 28, gap: 16 },
 
   headlineBlock: { alignItems: 'center', marginBottom: 8, gap: 6 },
-  headline:    { fontSize: 22, fontFamily: FONT, fontWeight: '300', letterSpacing: 0.2, textAlign: 'center' },
-  subheadline: { fontSize: 14, fontFamily: FONT, fontWeight: '300', letterSpacing: 0.3, textAlign: 'center' },
+  headline:    { fontSize: 22, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.2, textAlign: 'center' },
+  subheadline: { fontSize: 14, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.3, textAlign: 'center' },
 
   card: { borderRadius: 20, overflow: 'hidden', borderWidth: 0.5 },
   cardBorderTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 0.5 },
   cardPad: { padding: 20, gap: 10 },
 
   planTitle: { fontSize: 15, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.2, marginBottom: 4 },
-  planBody: { fontSize: 13, fontFamily: FONT, fontWeight: '300', lineHeight: 20 },
+  planBody: { fontSize: 13, fontFamily: FONT, fontWeight: '400', lineHeight: 20 },
 
   primaryBtn: {
     borderRadius: 14,
@@ -305,11 +305,11 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: { fontSize: 14, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.3 },
 
-  renewalNote: { fontSize: 10, fontFamily: FONT, fontWeight: '300', letterSpacing: 0.3 },
+  renewalNote: { fontSize: 10, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.3 },
 
   legalRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  legalLink: { fontSize: 11, fontFamily: FONT, fontWeight: '300', textDecorationLine: 'underline' },
-  legalSep:  { fontSize: 11, fontFamily: FONT, fontWeight: '300' },
+  legalLink: { fontSize: 11, fontFamily: FONT, fontWeight: '400', textDecorationLine: 'underline' },
+  legalSep:  { fontSize: 11, fontFamily: FONT, fontWeight: '400' },
 
   restoreBtn: {
     alignSelf: 'center',
@@ -319,15 +319,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     marginTop: 4,
   },
-  restoreBtnText: { fontSize: 13, fontFamily: FONT, fontWeight: '300', letterSpacing: 0.4 },
+  restoreBtnText: { fontSize: 13, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.4 },
 
-  notice: { textAlign: 'center', fontSize: 13, fontFamily: FONT, fontWeight: '300', letterSpacing: 0.3, marginTop: 4 },
+  notice: { textAlign: 'center', fontSize: 13, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.3, marginTop: 4 },
 
   footerLegal: {
     textAlign: 'center',
     fontSize: 11,
     fontFamily: FONT,
-    fontWeight: '300',
+    fontWeight: '400',
     letterSpacing: 0.3,
     lineHeight: 18,
     marginTop: 12,
