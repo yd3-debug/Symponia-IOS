@@ -1001,7 +1001,7 @@ export default function ProfiloScreen() {
             resizeMode="contain"
           />
           <Text style={[styles.footerName, { color: colors.cyan }]}>SYMPONIA</Text>
-          <Text style={[styles.footerVersion, { color: colors.textDim }]}>version 1.0.0</Text>
+          <Text style={[styles.footerVersion, { color: colors.textDim }]}>version 1.0.1</Text>
         </Animated.View>
 
       </ScrollView>
