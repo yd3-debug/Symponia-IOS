@@ -134,8 +134,8 @@ async function ensureProfileRow(user: { id: string; email?: string | null }) {
   }
 
   await supabase.from('profiles').upsert(
-    { email: user.email, user_id: user.id, tokens: TRIAL_TOKENS },
-    { onConflict: 'email' },
+    { email: user.email, user_id: user.id, topup_tokens: TRIAL_TOKENS },
+    { onConflict: 'email', ignoreDuplicates: true },
   ).catch((err: any) => console.warn('[SelfHeal] Upsert failed:', err?.message));
 }
 

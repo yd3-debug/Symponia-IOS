@@ -723,7 +723,7 @@ export default function OnboardingScreen() {
         gender,
         animals: animals,
         frequency: depth,
-        tokens: TRIAL_TOKENS,
+        topup_tokens: TRIAL_TOKENS,
       }, { onConflict: 'email' });
       if (profileError) {
         console.warn('[Onboarding] Profile upsert failed (trigger row exists):', profileError.message);
