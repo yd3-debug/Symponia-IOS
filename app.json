@@ -6,12 +6,12 @@
     "orientation": "portrait",
     "scheme": "symponia",
     "icon": "./Assets/images/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
       "image": "./Assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0E0B1A"
+      "backgroundColor": "#EDF5F5"
     },
     "ios": {
       "supportsTablet": false,
