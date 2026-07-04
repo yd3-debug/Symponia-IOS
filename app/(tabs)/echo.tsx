@@ -9,6 +9,7 @@ import {
   setupPurchaseListeners,
 } from '@/services/iap';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CoachTips, useFirstTip } from '@/components/CoachTip';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
@@ -125,7 +126,20 @@ const MODE_LABELS: Record<string, string> = {
   day:       'SYMPONIA · MY DAY',
   daily:     'SYMPONIA · TODAY',
   open:      'SYMPONIA · CHAT',
+  shadow:    'SYMPONIA · SHADOW',
 };
+
+// Gently-framed opening for a shadow session, seeded with the user's shadow animal.
+// Grounded in shadow-work guidance: name it with compassion, offer a soft (projection)
+// way in, and make clear this is a paced space — not therapy.
+function buildShadowGreeting(animals: string[]): string {
+  const shadow = animals[6] || animals[animals.length - 1] || '';
+  const key = shadow.toLowerCase().trim();
+  const arc = ANIMAL_ARCHETYPES[key];
+  const name = shadow ? shadow.charAt(0).toUpperCase() + shadow.slice(1).toLowerCase() : 'your shadow';
+  const moves = arc ? arc.shadow.split(';')[0].trim().toLowerCase() : 'something you keep just out of sight';
+  return `Your shadow is the ${name}. It often moves as ${moves}. We don't need to fix it — let's just meet it, gently, a little at a time. This isn't therapy; go at your own pace.\n\nWhere would you like to begin? You might start with when you feel this most — or who in your life seems to trigger it.`;
+}
 
 // ── Word (long-pressable) ─────────────────────────────────────────────────────
 
@@ -397,6 +411,17 @@ function AnimalReadingView({ animals, onAskMore, onWordLongPress }: { animals: s
       <Text style={[styles.animalReadingFooter, { color: colors.textDim }]}>
         which of these lands closest to the truth right now?
       </Text>
+
+      {/* Amend — exploring here never changes your archetypes; reshape them only here */}
+      <TouchableOpacity
+        onPress={() => router.navigate('/update-animals')}
+        activeOpacity={0.65}
+        style={{ alignItems: 'center', paddingVertical: 16 }}
+      >
+        <Text style={{ color: colors.cyan, fontSize: 12, fontWeight: '400', letterSpacing: 0.3 }}>
+          not quite you? reshape your animals →
+        </Text>
+      </TouchableOpacity>
     </Animated.View>
   );
 }
@@ -565,6 +590,9 @@ export default function DialogoScreen() {
           } else if (mode === 'animal' && animalsRaw) {
             const animals: string[] = JSON.parse(animalsRaw);
             greeting = animals.length > 0 ? buildAnimalGreeting(animals) : (MODE_GREETINGS[mode] ?? '');
+          } else if (mode === 'shadow' && animalsRaw) {
+            const animals: string[] = JSON.parse(animalsRaw);
+            greeting = animals.length >= 7 ? buildShadowGreeting(animals) : (MODE_GREETINGS[mode] ?? '');
           } else {
             greeting = MODE_GREETINGS[mode] ?? '';
           }
@@ -600,8 +628,10 @@ export default function DialogoScreen() {
     }, [])
   );
 
+  // Tapping the conversation area dismisses the keyboard so the reply is easy to
+  // read. The input bar still focuses normally when tapped directly.
   const toggleControls = () => {
-    inputRef.current?.focus();
+    Keyboard.dismiss();
   };
 
   const sendMessage = useCallback(async () => {
@@ -672,12 +702,14 @@ export default function DialogoScreen() {
 
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-        // Deduct one token for every response
+        // Optimistic decrement for instant feedback; the server (oracle) already
+        // deducted the real balance, so reconcile against it right after.
         setTokens((t) => {
           const next = Math.max(0, t - 1);
           deductToken(next);
           return next;
         });
+        syncTokens().then(setTokens).catch(() => {});
 
         // Persist with the final complete text — messagesRef may still have the
         // empty placeholder, so build the correct final list explicitly.
@@ -744,6 +776,8 @@ export default function DialogoScreen() {
   }, [currentMode]);
 
   const [showHelp, setShowHelp] = useState(false);
+  const restartRef = useRef<any>(null);
+  const chatTip = useFirstTip('chat');
 
   const inputBg = isDark ? 'rgba(14,11,26,0.55)' : colors.bgMid + '8C';
   const modeLabel = currentMode ? (MODE_LABELS[currentMode] ?? 'SYMPONIA') : 'SYMPONIA · CHAT';
@@ -774,11 +808,26 @@ export default function DialogoScreen() {
               </Text>
             )}
             <TouchableOpacity
+              ref={restartRef}
               style={styles.clearBtn}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                if (currentMode) clearConversation(currentMode);
-                setMessages([]);
+                Alert.alert(
+                  'Start a new session?',
+                  'This clears the current conversation. Everything in this chat will be erased and cannot be recovered.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Clear chat',
+                      style: 'destructive',
+                      onPress: () => {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                        if (currentMode) clearConversation(currentMode);
+                        setMessages([]);
+                      },
+                    },
+                  ],
+                );
               }}
               hitSlop={12}
               activeOpacity={0.6}
@@ -841,6 +890,8 @@ export default function DialogoScreen() {
             : insets.bottom + 160,
         }]}
         showsVerticalScrollIndicator={false}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
         onScrollBeginDrag={() => Keyboard.dismiss()}
         onScroll={(e) => {
           const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
@@ -975,7 +1026,7 @@ export default function DialogoScreen() {
               style={[styles.textInput, { color: colors.text }]}
               value={inputText}
               onChangeText={setInputText}
-              placeholder={currentMode === 'animal' && userAnimals.length === 0 && localAnimals.length === 0 ? 'tap animals above...' : 'speak...'}
+              placeholder={currentMode === 'animal' && userAnimals.length === 0 && localAnimals.length === 0 ? 'tap animals above...' : 'speak — in any language…'}
               placeholderTextColor={colors.textDim}
               multiline
               returnKeyType="default"
@@ -1057,6 +1108,19 @@ export default function DialogoScreen() {
             <Text style={[styles.tokenBtnText, { color: colors.cyan }]}>Go to Profile</Text>
           </TouchableOpacity>
         </Animated.View>
+      )}
+
+      {chatTip.visible && (
+        <CoachTips
+          tipKey="chat"
+          steps={[{
+            title: 'your space to reflect',
+            body: 'Write in any language — Symponia understands and replies in kind. Long-press any word in a reply to hear its archetype, and tap ↺ to start fresh.',
+            target: restartRef,
+            place: 'below',
+          }]}
+          onClose={chatTip.dismiss}
+        />
       )}
     </View>
   );

@@ -4,7 +4,7 @@ import { supabase } from '@/services/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Dimensions,
@@ -30,7 +30,7 @@ const CELL_SIZE = (SCREEN_W - H_PAD * 2 - CELL_GAP * (COLS - 1)) / COLS;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Step = 'welcome' | 'name' | 'gender' | 'animals' | 'depth' | 'legal';
+type Step = 'welcome' | 'attune' | 'name' | 'gender' | 'animals' | 'archetype' | 'depth' | 'legal';
 type Frequency = 'Quiet' | 'Intellectual' | 'Deeply Emotional';
 
 // ── Data ──────────────────────────────────────────────────────────────────────
@@ -409,6 +409,12 @@ function AnimalsStep({ colors, animals, setAnimals, cols, setCols, onNext, onBac
         </Text>
       )}
 
+      {stage === 2 && (
+        <Text style={[styles.animalsNote, { color: colors.textDim }]}>
+          you can reshape these anytime in Settings → Your Archetypes. Symponia keeps your animals in mind in every reflection.
+        </Text>
+      )}
+
       <TouchableOpacity
         style={[
           styles.primaryBtn,
@@ -477,6 +483,9 @@ function DepthStep({ colors, depth, setDepth, onNext }: {
           );
         })}
       </View>
+      <Text style={[styles.animalsNote, { color: colors.textDim }]}>
+        and in any language — write however feels natural, and Symponia answers in kind.
+      </Text>
       <TouchableOpacity
         style={[styles.primaryBtn, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder }]}
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onNext(); }}
@@ -551,6 +560,8 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="next"
+        textContentType="username"
+        autoComplete="email"
       />
 
       {/* Password with show/hide */}
@@ -565,6 +576,9 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="next"
+          textContentType="newPassword"
+          autoComplete="new-password"
+          passwordRules="minlength: 8;"
         />
         <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={8} activeOpacity={0.6} style={styles.eyeBtn}>
           <Text style={[styles.eyeText, { color: colors.textDim }]}>{showPassword ? 'hide' : 'show'}</Text>
@@ -599,6 +613,8 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
           autoCorrect={false}
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
+          textContentType="password"
+          autoComplete="new-password"
         />
         <TouchableOpacity onPress={() => setShowConfirm(v => !v)} hitSlop={8} activeOpacity={0.6} style={styles.eyeBtn}>
           <Text style={[styles.eyeText, { color: colors.textDim }]}>{showConfirm ? 'hide' : 'show'}</Text>
@@ -672,9 +688,289 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
   );
 }
 
+// ── Step: Attune (Jungian intake) ─────────────────────────────────────────────
+// Ten short, multiple-choice questions in a reflective/archetypal voice. Answers
+// are kept on-device only (no backend) and used to make onboarding feel personal.
+// Grounded in shadow-work research: projection as the doorway, "heavier before
+// lighter is normal", war → compassion. Deliberately NOT a clinical/crisis screen.
+
+const ATTUNE_QUESTIONS: { q: string; options: string[] }[] = [
+  { q: 'what brings you here, right now?', options: [
+    "something's been quietly off, and I want to understand it",
+    "I'm curious about the parts of me I don't look at",
+    'I keep circling the same feeling and want a way through',
+    'I just want a space that is mine to think',
+  ] },
+  { q: 'when a feeling rises that you can’t name, you tend to—', options: [
+    'sit with it and turn inward',
+    'reason through it until it settles',
+    'stay busy and let it pass',
+    'reach for someone to talk to',
+  ] },
+  { q: 'the trait that irritates you most in others is usually—', options: [
+    'one I quietly carry too',
+    'one I’ve worked hard to bury',
+    'one I secretly wish I had',
+    'one I’ve made peace with',
+  ] },
+  { q: 'lately, when you turn inward, it feels—', options: [
+    'heavier than I expected',
+    'foggy, hard to make out',
+    'restless, like something wants to move',
+    'quieter than it used to be',
+  ] },
+  { q: 'the part of you others rarely see is—', options: [
+    'softer than I let on',
+    'sharper, more certain than I show',
+    'hungrier, more ambitious',
+    'tired, and carrying a lot',
+  ] },
+  { q: 'when something painful surfaces, you—', options: [
+    'pull inward and go quiet',
+    'explain it away',
+    'push through and stay busy',
+    'let it move through me',
+  ] },
+  { q: 'what do you most want from a space like this?', options: [
+    'to be understood without explaining',
+    'honesty, even when it stings',
+    'presence — something simply there',
+    'to be seen as more than I feel right now',
+  ] },
+  { q: 'the parts of yourself you don’t like, you tend to—', options: [
+    'hide them, even from myself',
+    'fight to fix or overcome them',
+    'pretend they are not there',
+    'I’m learning to let them sit with me',
+  ] },
+  { q: 'the story you tell about yourself is—', options: [
+    'still being written',
+    'one I’m ready to question',
+    'heavier than it needs to be',
+    'quieter than the truth',
+  ] },
+  { q: 'if Symponia could meet you in one way, it would be—', options: [
+    'gently — no rush, no pressure',
+    'directly — name what I avoid',
+    'patiently — returning over time',
+    'warmly — less war, more curiosity',
+  ] },
+  { q: 'when someone praises you, you—', options: [
+    'deflect it quickly',
+    'quietly doubt it',
+    'take it in, a little',
+    'replay it later, alone',
+  ] },
+  { q: 'the emotion you find hardest to show is—', options: [
+    'anger',
+    'need',
+    'sadness',
+    'tenderness',
+  ] },
+  { q: 'when you’re alone for a long while, you—', options: [
+    'feel most like yourself',
+    'grow restless',
+    'start to hear what you avoid',
+    'feel the weight of it',
+  ] },
+  { q: 'the version of you that you keep hidden is—', options: [
+    'more vulnerable than I show',
+    'more powerful than I admit',
+    'more selfish than I’d like',
+    'more free than I allow',
+  ] },
+  { q: 'what you look for in others is often—', options: [
+    'what I haven’t given myself',
+    'a mirror for who I am',
+    'someone who needs me',
+    'distance, room to breathe',
+  ] },
+  { q: 'change, for you, usually arrives—', options: [
+    'slowly, then all at once',
+    'only when something breaks',
+    'when I finally stop resisting',
+    'quietly, before I notice',
+  ] },
+];
+
+function AttuneStep({ colors, answers, setAnswers, onNext, onBack, onProgress }: {
+  colors: any; answers: number[]; setAnswers: (v: number[]) => void;
+  onNext: () => void; onBack: () => void; onProgress: (f: number) => void;
+}) {
+  const [idx, setIdx] = React.useState(0);
+  const total = ATTUNE_QUESTIONS.length;
+
+  // Report sub-progress so the global top bar advances through the 16 questions.
+  React.useEffect(() => {
+    onProgress(total > 1 ? idx / (total - 1) : 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idx]);
+  const q = ATTUNE_QUESTIONS[idx];
+  const selected = answers[idx] ?? -1;
+
+  const choose = (i: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const next = answers.slice();
+    next[idx] = i;
+    setAnswers(next);
+  };
+
+  const advance = () => {
+    if (selected < 0) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (idx < total - 1) setIdx(idx + 1);
+    else onNext();
+  };
+
+  const back = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (idx > 0) setIdx(idx - 1);
+    else onBack();
+  };
+
+  return (
+    <Animated.View key={idx} entering={FadeIn.duration(350)} style={styles.stepWrap}>
+      <View style={styles.stepHeader}>
+        <Text style={[styles.stepLabel, { color: colors.textDim }]}>
+          {`attuning · ${String(idx + 1).padStart(2, '0')} / ${total}`}
+        </Text>
+        <Text style={[styles.stepQuestion, { color: colors.text }]}>{q.q}</Text>
+        <Text style={[styles.stepHint, { color: colors.textDim }]}>
+          there are no wrong answers — only what feels true
+        </Text>
+      </View>
+
+      <View style={styles.optionList}>
+        {q.options.map((opt, i) => {
+          const active = selected === i;
+          return (
+            <TouchableOpacity
+              key={i}
+              style={[
+                styles.optionRow,
+                { borderColor: active ? colors.cyanBorder : colors.glassBorder },
+                active && { backgroundColor: colors.cyanDim },
+              ]}
+              onPress={() => choose(i)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.radioOuter, { borderColor: active ? colors.cyan : colors.textDim }]}>
+                {active && <View style={[styles.radioInner, { backgroundColor: colors.cyan }]} />}
+              </View>
+              <Text style={[styles.optionLabel, { color: active ? colors.text : colors.textSub, flex: 1 }]}>
+                {opt}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <TouchableOpacity
+        style={[
+          styles.primaryBtn,
+          {
+            backgroundColor: selected >= 0 ? colors.cyanDim : 'transparent',
+            borderColor: selected >= 0 ? colors.cyanBorder : colors.glassBorder,
+          },
+        ]}
+        onPress={advance}
+        activeOpacity={selected >= 0 ? 0.75 : 1}
+      >
+        <Text style={[styles.primaryBtnText, { color: selected >= 0 ? colors.cyan : colors.textDim }]}>
+          {idx < total - 1 ? 'continue' : 'begin'}
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={back} activeOpacity={0.65} style={styles.animalBackBtn}>
+        <Text style={[styles.animalBackText, { color: colors.textDim }]}>← back</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+// ── Weaving profile (perceived personalization) ───────────────────────────────
+// A held, unhurried moment after consent. Purely cosmetic timing — it gives the
+// felt sense that Symponia is shaping itself around the user before they enter.
+
+function WeavingProfile({ colors, name, onDone }: { colors: any; name: string; onDone: () => void }) {
+  const messages = [
+    'gathering your reflections',
+    'reading your archetypes',
+    'attuning Symponia’s voice to you',
+    'weaving your private profile',
+    'almost ready',
+  ];
+  const [mi, setMi] = React.useState(0);
+
+  useEffect(() => {
+    const stepMs = 1100;
+    const timers = messages.map((_, i) => setTimeout(() => setMi(i), i * stepMs));
+    const done = setTimeout(onDone, messages.length * stepMs + 500);
+    return () => { timers.forEach(clearTimeout); clearTimeout(done); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const pct = ((mi + 1) / messages.length) * 100;
+  const who = name?.trim() ? `creating ${name.trim().toLowerCase()}’s space` : 'creating your private space';
+
+  return (
+    <Animated.View entering={FadeIn.duration(400)} style={styles.weaveWrap}>
+      <Text style={[styles.glyph, { color: colors.violet }]}>◈</Text>
+      <Text style={[styles.weaveTitle, { color: colors.cyan }]}>{who}</Text>
+      <Text style={[styles.weaveMsg, { color: colors.textSub }]}>{messages[mi]}…</Text>
+      <View style={[styles.weaveTrack, { backgroundColor: colors.glassBorder }]}>
+        <View style={[styles.weaveFill, { backgroundColor: colors.cyan, width: `${pct}%` }]} />
+      </View>
+      <Text style={[styles.weaveFoot, { color: colors.textDim }]}>
+        this stays yours — held in confidence, shaped only for you
+      </Text>
+    </Animated.View>
+  );
+}
+
+// ── Step: Archetype info (after animals) ──────────────────────────────────────
+// Explains what the chosen animals mean, that Symponia (the AI) learns from them
+// plus the intake answers, where to find/change them, and a gentle update cadence.
+
+function ArchetypeInfoStep({ colors, isDark, onNext, onBack }: {
+  colors: any; isDark: boolean; onNext: () => void; onBack: () => void;
+}) {
+  const inputBg = isDark ? 'rgba(120,90,220,0.06)' : 'rgba(70,50,160,0.06)';
+  return (
+    <Animated.View entering={FadeIn.duration(400)} style={styles.stepWrap}>
+      <View style={styles.stepHeader}>
+        <Text style={[styles.stepLabel, { color: colors.textDim }]}>your archetype</Text>
+        <Text style={[styles.stepQuestion, { color: colors.text }]}>{'a living\narchetype'}</Text>
+      </View>
+
+      <View style={[styles.aiConsentCard, { borderColor: colors.glassBorder, backgroundColor: inputBg }]}>
+        <Text style={[styles.aiConsentBody, { color: colors.textSub }]}>
+          {"Your seven animals — your dominant, your five, and your shadow — together form your archetype. Symponia reads them, alongside how you answered just now, to learn your nature and shape how it reflects with you.\n\nYou can see what each animal carries — its gift, its shadow, its path — anytime in Settings → Your Archetypes, and reshape them there whenever you like.\n\nThey're meant to grow with you, not to be fixed. We suggest revisiting them about once a month — or whenever you feel something in you has shifted."}
+        </Text>
+      </View>
+
+      <View style={[styles.archInfoRow, { borderColor: colors.glassBorder }]}>
+        <Text style={[styles.archInfoLabel, { color: colors.textDim }]}>find them in</Text>
+        <Text style={[styles.archInfoValue, { color: colors.cyan }]}>Settings › Your Archetypes</Text>
+      </View>
+
+      <TouchableOpacity
+        style={[styles.primaryBtn, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder }]}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onNext(); }}
+        activeOpacity={0.75}
+      >
+        <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>continue</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={onBack} activeOpacity={0.65} style={styles.animalBackBtn}>
+        <Text style={[styles.animalBackText, { color: colors.textDim }]}>← back</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
 // ── Onboarding ────────────────────────────────────────────────────────────────
 
-const STEPS: Step[] = ['welcome', 'name', 'gender', 'animals', 'depth', 'legal'];
+const STEPS: Step[] = ['welcome', 'attune', 'name', 'gender', 'animals', 'archetype', 'depth', 'legal'];
 
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
@@ -691,6 +987,9 @@ export default function OnboardingScreen() {
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [agreedMarketing, setAgreedMarketing] = useState(false);
   const [showAIConsent, setShowAIConsent] = useState(false);
+  const [showWeaving, setShowWeaving] = useState(false);
+  const [attune, setAttune] = useState<number[]>([]);
+  const [attuneProgress, setAttuneProgress] = useState(0);
   const [authError, setAuthError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -738,6 +1037,7 @@ export default function OnboardingScreen() {
       ['symponia_frequency', depth],
       ['symponia_marketing', String(agreedMarketing)],
       ['symponia_tokens', String(TRIAL_TOKENS)],
+      ['symponia_attune', JSON.stringify(attune)],
     ]);
 
     setIsSubmitting(false);
@@ -770,6 +1070,7 @@ export default function OnboardingScreen() {
 
     if (!consentWritten) {
       await AsyncStorage.removeItem('symponia_ai_consent');
+      setShowWeaving(false);
       Alert.alert(
         'Setup incomplete',
         'We could not record your consent on our servers. Please check your connection and try again.',
@@ -786,14 +1087,16 @@ export default function OnboardingScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.bg, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <View style={[styles.progressTrack, { backgroundColor: colors.glassBorder }]}>
-        <Animated.View
-          style={[
-            styles.progressFill,
-            { backgroundColor: colors.cyan, width: `${(stepIndex / (STEPS.length - 1)) * 100}%` },
-          ]}
-        />
-      </View>
+      {step !== 'welcome' && (
+        <View style={[styles.progressTrack, { backgroundColor: colors.glassBorder }]}>
+          <Animated.View
+            style={[
+              styles.progressFill,
+              { backgroundColor: colors.cyan, width: `${Math.min(1, (stepIndex + (step === 'attune' ? attuneProgress : 0)) / (STEPS.length - 1)) * 100}%` },
+            ]}
+          />
+        </View>
+      )}
 
       {showBack && (
         <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)} style={styles.navRow}>
@@ -812,8 +1115,10 @@ export default function OnboardingScreen() {
         </Animated.View>
       )}
 
-      {showAIConsent ? (
-        <AIConsentStep colors={colors} isDark={isDark} onComplete={finalizeOnboarding} />
+      {showWeaving ? (
+        <WeavingProfile colors={colors} name={name} onDone={finalizeOnboarding} />
+      ) : showAIConsent ? (
+        <AIConsentStep colors={colors} isDark={isDark} onComplete={() => setShowWeaving(true)} />
       ) : (
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -821,9 +1126,11 @@ export default function OnboardingScreen() {
         showsVerticalScrollIndicator={false}
       >
         {step === 'welcome' && <WelcomeStep key="welcome" colors={colors} onNext={goNext} />}
+        {step === 'attune'  && <AttuneStep key="attune" colors={colors} answers={attune} setAnswers={setAttune} onNext={goNext} onBack={() => setStep('welcome')} onProgress={setAttuneProgress} />}
         {step === 'name'    && <NameStep key="name" colors={colors} name={name} setName={setName} onNext={goNext} />}
         {step === 'gender'  && <GenderStep key="gender" colors={colors} gender={gender} setGender={setGender} onNext={goNext} />}
         {step === 'animals' && <AnimalsStep key="animals" colors={colors} animals={animals} setAnimals={setAnimals} cols={animalCols} setCols={setAnimalCols} onNext={goNext} onBack={() => setStep('gender')} />}
+        {step === 'archetype' && <ArchetypeInfoStep key="archetype" colors={colors} isDark={isDark} onNext={goNext} onBack={() => setStep('animals')} />}
         {step === 'depth'   && <DepthStep key="depth" colors={colors} depth={depth} setDepth={setDepth} onNext={goNext} />}
         {step === 'legal'   && (
           <LegalStep
@@ -948,8 +1255,8 @@ const FONT = Platform.select({ ios: 'Helvetica Neue', android: 'Roboto', default
 const styles = StyleSheet.create({
   screen: { flex: 1 },
 
-  progressTrack: { height: 1 },
-  progressFill:  { height: 1 },
+  progressTrack: { height: 3 },
+  progressFill:  { height: 3 },
 
   navRow: {
     flexDirection: 'row',
@@ -1218,6 +1525,81 @@ const styles = StyleSheet.create({
     fontFamily: FONT,
     fontWeight: '400',
     letterSpacing: 0.3,
+  },
+  animalsNote: {
+    fontSize: 11,
+    fontFamily: FONT,
+    fontWeight: '400',
+    lineHeight: 16,
+    letterSpacing: 0.2,
+    textAlign: 'center',
+    paddingHorizontal: 8,
+  },
+  archInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 0.5,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  archInfoLabel: {
+    fontSize: 11,
+    fontFamily: FONT,
+    fontWeight: '400',
+    letterSpacing: 0.5,
+  },
+  archInfoValue: {
+    fontSize: 13,
+    fontFamily: FONT,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+
+  // Weaving / private-profile moment
+  weaveWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: H_PAD,
+    gap: 18,
+  },
+  weaveTitle: {
+    fontSize: 13,
+    fontFamily: FONT,
+    fontWeight: '500',
+    letterSpacing: 3,
+    textTransform: 'lowercase',
+    textAlign: 'center',
+  },
+  weaveMsg: {
+    fontSize: 15,
+    fontFamily: FONT,
+    fontWeight: '400',
+    letterSpacing: 0.3,
+    textAlign: 'center',
+  },
+  weaveTrack: {
+    width: '70%',
+    height: 2,
+    borderRadius: 1,
+    overflow: 'hidden',
+    marginTop: 4,
+  },
+  weaveFill: {
+    height: '100%',
+    borderRadius: 1,
+  },
+  weaveFoot: {
+    fontSize: 11,
+    fontFamily: FONT,
+    fontWeight: '400',
+    letterSpacing: 0.3,
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 12,
+    lineHeight: 16,
   },
 
   authError: {

@@ -2,7 +2,7 @@ import { useTheme } from '@/constants/ThemeContext';
 import { BlurView } from 'expo-blur';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -87,6 +87,8 @@ function GlassTabBar({ state, navigation }: BottomTabBarProps) {
     pulse: (f) => <ProfileIcon focused={f} color={f ? colors.cyan : colors.textDim} />,
   };
 
+  const labels: Record<string, string> = { index: 'home', echo: 'talk', pulse: 'you' };
+
   return (
     <View style={styles.wrapper}>
       <BlurView intensity={85} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
@@ -99,8 +101,25 @@ function GlassTabBar({ state, navigation }: BottomTabBarProps) {
             if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
           };
           return (
-            <TouchableOpacity key={route.key} style={styles.tab} onPress={onPress} activeOpacity={0.65}>
+            <TouchableOpacity
+              key={route.key}
+              style={styles.tab}
+              onPress={onPress}
+              activeOpacity={0.65}
+              accessibilityRole="button"
+              accessibilityState={{ selected: focused }}
+              accessibilityLabel={labels[route.name] ?? route.name}
+            >
               {icons[route.name]?.(focused)}
+              <Text
+                style={[
+                  styles.label,
+                  { color: focused ? colors.cyan : 'transparent' },
+                ]}
+                numberOfLines={1}
+              >
+                {labels[route.name] ?? ''}
+              </Text>
             </TouchableOpacity>
           );
         })}

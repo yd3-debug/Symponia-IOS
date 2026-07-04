@@ -1,6 +1,8 @@
 import { useTheme } from '@/constants/ThemeContext';
 import * as Notifications from 'expo-notifications';
 import { topUpDailyReflections } from '@/services/notifications';
+import { syncTokens } from '@/services/supabaseTokens';
+import { ANIMAL_ARCHETYPES, emojiForAnimal } from '@/constants/systemPrompt';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect } from 'expo-router';
@@ -30,13 +32,13 @@ const MODES = [
     id: 'day',
     glyph: '◎',
     title: 'MY DAY',
-    subtitle: 'A guided reflection on today — shaped by your archetypes and how you\'re feeling right now.',
+    subtitle: 'A reflection shaped by today and how you feel.',
   },
   {
     id: 'open',
     glyph: '···',
     title: 'CONVERSATION',
-    subtitle: 'Open chat. Bring anything — a question, a thought, a feeling. No structure, no prompt.',
+    subtitle: 'Open chat — bring anything on your mind.',
   },
 ] as const;
 
@@ -259,6 +261,10 @@ export default function OracoloScreen() {
   const [dailyFailed, setDailyFailed] = useState(false);
   const [showWalkthrough, setShowWalkthrough] = useState(false);
   const [measurements, setMeasurements] = useState<Measurements>({ header: null, daily: null, modes: null });
+  const [name, setName] = useState('');
+  const [tokens, setTokens] = useState<number | null>(null);
+  const [lastMode, setLastMode] = useState<string | null>(null);
+  const [animals, setAnimals] = useState<string[]>([]);
 
   // Refs for elements we need to position tooltips near
   const headerRef = useRef<View>(null);
@@ -279,6 +285,15 @@ export default function OracoloScreen() {
       });
     }, 80);
   }, []);
+
+  useFocusEffect(useCallback(() => {
+    AsyncStorage.multiGet(['symponia_name', 'symponia_active_mode', 'symponia_animals']).then(([[, n], [, m], [, a]]) => {
+      setName(n || '');
+      setLastMode(m || null);
+      if (a) { try { setAnimals(JSON.parse(a)); } catch {} }
+    });
+    syncTokens().then(setTokens).catch(() => {});
+  }, []));
 
   useFocusEffect(useCallback(() => {
     AsyncStorage.getItem('symponia_walkthrough_done').then((done) => {
@@ -334,6 +349,20 @@ export default function OracoloScreen() {
   }, []);
 
   const dailyBg = colors.cyanDim;
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'good morning' : hour < 18 ? 'good afternoon' : 'good evening';
+  const lastModeMeta = lastMode ? MODES.find((m) => m.id === lastMode) : null;
+
+  const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '');
+  const dominant = animals[0];
+  const shadow = animals[6];
+  const domArc = dominant ? ANIMAL_ARCHETYPES[dominant.toLowerCase().trim()] : undefined;
+  const archetypeSubtitle = dominant
+    ? `${cap(dominant)}, dominant${shadow ? ` · ${cap(shadow)}, your shadow` : ''}`
+    : 'Seven animals that reveal who you are.';
+  const livingLine = domArc
+    ? `"${(domArc.shadow.split(';')[1] || domArc.shadow.split(';')[0]).trim().toLowerCase().replace(/\.$/, '')}."`
+    : '';
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.bg }]}>
@@ -344,10 +373,21 @@ export default function OracoloScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View entering={FadeIn.duration(280)} style={styles.header}>
-          <View ref={headerRef} collapsable={false}>
-            <Text style={[styles.appName, { color: colors.cyan }]}>SYMPONIA</Text>
+        <Animated.View entering={FadeIn.duration(280)} style={styles.headerRow}>
+          <View ref={headerRef} collapsable={false} style={styles.greetWrap}>
+            <Text style={[styles.greetLabel, { color: colors.cyan }]}>{greeting}</Text>
+            <Text style={[styles.greetName, { color: colors.text }]}>{name.trim() || 'welcome'}</Text>
+            <Text style={[styles.greetSub, { color: colors.textDim }]}>a quiet moment is yours.</Text>
           </View>
+          {tokens !== null && (
+            <TouchableOpacity
+              onPress={() => router.navigate('/(tabs)/pulse')}
+              activeOpacity={0.7}
+              style={[styles.tokPill, { borderColor: colors.cyanBorder, backgroundColor: colors.cyanDim }]}
+            >
+              <Text style={[styles.tokPillText, { color: colors.cyan }]}>{`✦ ${tokens}`}</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
 
         {/* Divider */}
@@ -367,13 +407,16 @@ export default function OracoloScreen() {
                   <Text style={[styles.dailyLabel, { color: colors.cyan }]}>REFLECTION · TODAY</Text>
                   <Text style={[styles.cardChevron, { color: colors.cyan }]}>›</Text>
                 </View>
-                <Text style={[styles.dailyTeaser, { color: dailyTeaser ? colors.text : colors.textDim }]} numberOfLines={2}>
+                <Text style={[styles.dailyTeaser, { color: dailyTeaser ? colors.text : colors.textDim }]} numberOfLines={3}>
                   {dailyTeaser
                     ? dailyTeaser
                     : dailyFailed
                       ? 'Tap to refresh.'
                       : 'your daily reflection is being prepared…'}
                 </Text>
+                {dailyTeaser ? (
+                  <Text style={[styles.dailyCta, { color: colors.cyan }]}>sit with this →</Text>
+                ) : null}
               </View>
             </View>
           </TouchableOpacity>
@@ -389,15 +432,51 @@ export default function OracoloScreen() {
 
         {/* Mode cards */}
         <View ref={modeCardsRef} style={styles.cards} collapsable={false}>
-          {MODES.map((mode, i) => (
+          <Animated.View entering={FadeInDown.duration(260)}>
+            <TouchableOpacity
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.navigate('/archetype'); }}
+              activeOpacity={0.72}
+            >
+              <View style={[styles.card, { borderColor: colors.cyanBorder }]}>
+                <View style={[styles.cardBg, { backgroundColor: colors.cyanDim }]} />
+                <View style={[styles.cardBorderTop, { backgroundColor: colors.cyanBorder }]} />
+                <View style={styles.cardRow}>
+                  <Text style={[styles.cardGlyph, { color: colors.cyan }]}>{dominant ? emojiForAnimal(dominant) : '◈'}</Text>
+                  <View style={styles.cardBody}>
+                    <Text style={[styles.cardTitle, { color: colors.cyan }]}>YOUR ARCHETYPE</Text>
+                    <Text style={[styles.cardSubtitle, { color: colors.textSub }]}>{archetypeSubtitle}</Text>
+                    {livingLine ? <Text style={[styles.livingLine, { color: colors.textDim }]}>{livingLine}</Text> : null}
+                  </View>
+                  <Text style={[styles.cardChevron, { color: colors.textDim }]}>›</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
+          {MODES.slice(1).map((mode, i) => (
             <ModeCard
               key={mode.id}
               mode={mode}
-              index={i}
+              index={i + 1}
               onPress={() => startMode(mode.id)}
             />
           ))}
         </View>
+
+        {lastModeMeta && (
+          <Animated.View entering={FadeIn.duration(250).delay(150)}>
+            <TouchableOpacity
+              onPress={() => startMode(lastModeMeta.id)}
+              activeOpacity={0.72}
+              style={[styles.continueRow, { borderColor: colors.glassBorder }]}
+            >
+              <Text style={[styles.continueIcon, { color: colors.cyan }]}>↩</Text>
+              <Text style={[styles.continueText, { color: colors.textSub }]} numberOfLines={1}>
+                {`continue your last reflection · ${lastModeMeta.title.toLowerCase()}`}
+              </Text>
+              <Text style={[styles.cardChevron, { color: colors.textDim, fontSize: 18 }]}>›</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
 
       </ScrollView>
 
@@ -429,13 +508,26 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', marginBottom: 24 },
   appName: { fontSize: 14, letterSpacing: 8, fontFamily: FONT, fontWeight: '400' },
 
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 22 },
+  greetWrap: { gap: 3, flex: 1 },
+  greetLabel: { fontSize: 11, letterSpacing: 2, fontFamily: FONT, fontWeight: '500', textTransform: 'uppercase' },
+  greetName: { fontSize: 26, fontFamily: FONT, fontWeight: '300', letterSpacing: -0.3 },
+  greetSub: { fontSize: 12, fontFamily: FONT, fontWeight: '400' },
+  tokPill: { flexDirection: 'row', alignItems: 'center', borderWidth: 0.5, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6, marginTop: 4 },
+  tokPillText: { fontSize: 13, fontFamily: FONT, fontWeight: '500' },
+
   divider: { height: 0.5, marginBottom: 18 },
 
   dailyCard: { borderRadius: 20, overflow: 'hidden', borderWidth: 0.5, marginBottom: 20 },
   dailyCardInner: { paddingHorizontal: 20, paddingVertical: 18, gap: 8 },
   dailyTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   dailyLabel: { fontSize: 9, letterSpacing: 3, fontFamily: FONT, fontWeight: '500' },
-  dailyTeaser: { fontSize: 14, fontFamily: FONT, fontWeight: '400', lineHeight: 21, letterSpacing: 0.2 },
+  dailyTeaser: { fontSize: 16, fontFamily: FONT, fontWeight: '400', lineHeight: 23, letterSpacing: 0.2 },
+  dailyCta: { fontSize: 12, fontFamily: FONT, fontWeight: '400', marginTop: 2 },
+
+  continueRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 0.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13, marginTop: -16, marginBottom: 26 },
+  continueIcon: { fontSize: 15 },
+  continueText: { flex: 1, fontSize: 13, fontFamily: FONT, fontWeight: '400' },
 
   prompt: { fontSize: 11, fontFamily: FONT, fontWeight: '400', letterSpacing: 1, textAlign: 'center', marginBottom: 20 },
 
@@ -448,6 +540,7 @@ const styles = StyleSheet.create({
   cardBody: { flex: 1, gap: 5 },
   cardTitle: { fontSize: 10, letterSpacing: 2.5, fontFamily: FONT, fontWeight: '500' },
   cardSubtitle: { fontSize: 13, fontFamily: FONT, fontWeight: '400', lineHeight: 19 },
+  livingLine: { fontSize: 11.5, fontFamily: FONT, fontWeight: '400', fontStyle: 'italic', marginTop: 4 },
   cardChevron: { fontSize: 22 },
 
   footerBar: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', paddingTop: 10 },

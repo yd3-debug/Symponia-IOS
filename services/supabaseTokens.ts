@@ -3,87 +3,50 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 
 // ── Token model ───────────────────────────────────────────────────────────────
-// Single bucket. New users receive TRIAL_TOKENS once on first sign-up.
-// Subscriptions reset tokens to 350 each billing period (server writes tokens_reset_at).
-// AsyncStorage key: 'symponia_tokens'
-// AsyncStorage key: 'symponia_last_reset_seen' — ISO timestamp of last known server reset
+// The server (oracle edge function) is the SINGLE source of truth for spending:
+// on every reflection it deducts subscription_tokens first, then topup_tokens.
+//
+// The client only DISPLAYS the remaining balance (subscription_tokens + topup_tokens)
+// and keeps a local optimistic copy in AsyncStorage ('symponia_tokens') so the UI
+// can update instantly. The client never writes the balance back to the server —
+// doing so previously double-counted against the wrong (legacy `tokens`) column and
+// caused the balance to "reset" on every re-sync.
 
-interface RemoteProfile {
-  tokens: number | null;
-  tokens_reset_at: string | null;
+interface RemoteBalance {
+  subscription_tokens: number;
+  topup_tokens: number;
 }
 
-async function fetchRemoteProfile(): Promise<RemoteProfile> {
+async function fetchRemoteBalance(): Promise<RemoteBalance | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('tokens, tokens_reset_at')
+    .select('subscription_tokens, topup_tokens')
     .maybeSingle();
 
   if (error) throw error;
+  if (!data) return null;
   return {
-    tokens: data?.tokens ?? null,
-    tokens_reset_at: data?.tokens_reset_at ?? null,
+    subscription_tokens: data.subscription_tokens ?? 0,
+    topup_tokens: data.topup_tokens ?? 0,
   };
 }
 
-async function upsertTokens(tokens: number): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
-
-  await supabase
-    .from('profiles')
-    .upsert(
-      { user_id: user.id, tokens, updated_at: new Date().toISOString() },
-      { onConflict: 'user_id' },
-    );
-}
-
-// ── App-level sync ────────────────────────────────────────────────────────────
-
-// Call on app launch / foreground. Returns authoritative token count.
-// When the server has reset tokens for a new billing period (tokens_reset_at
-// is newer than symponia_last_reset_seen), the server value is used directly
-// instead of the normal max(local, remote) reconciliation, so a user whose
-// subscription renewed while the app was closed gets their tokens back on
-// first open without relying solely on the Apple server-to-server webhook.
+// Authoritative remaining reflections = subscription + top-up.
+// Call on launch, on foreground, and after each reflection to reconcile.
+// Subscription renewals are applied server-side (subscription_tokens is rewritten),
+// so reading the live sum automatically reflects a renewal without client reset logic.
 export async function syncTokens(): Promise<number> {
   try {
-    const pairs = await AsyncStorage.multiGet(['symponia_tokens', 'symponia_last_reset_seen']);
-    const localStr = pairs[0][1];
-    const lastResetSeen = pairs[1][1];
-
-    const profile = await fetchRemoteProfile();
-
-    let tokens: number;
-
-    if (profile.tokens === null) {
-      // Profile has no tokens row yet — preserve local if it exists
-      tokens = localStr !== null ? parseInt(localStr, 10) : TRIAL_TOKENS;
-      await upsertTokens(tokens);
-      await AsyncStorage.setItem('symponia_tokens', String(tokens));
-    } else {
-      const serverResetAt = profile.tokens_reset_at;
-      const hasNewReset = serverResetAt && (!lastResetSeen || serverResetAt > lastResetSeen);
-
-      if (hasNewReset) {
-        // Server reset tokens for a new billing period — trust server value
-        tokens = profile.tokens;
-        await AsyncStorage.multiSet([
-          ['symponia_tokens', String(tokens)],
-          ['symponia_last_reset_seen', serverResetAt],
-        ]);
-      } else {
-        // Normal reconciliation: remote wins if higher (e.g. purchased on another device)
-        const local = localStr !== null ? parseInt(localStr, 10) : 0;
-        tokens = Math.max(profile.tokens, local);
-        await AsyncStorage.setItem('symponia_tokens', String(tokens));
-        if (tokens !== profile.tokens) await upsertTokens(tokens);
-      }
+    const balance = await fetchRemoteBalance();
+    if (balance === null) {
+      const local = await AsyncStorage.getItem('symponia_tokens');
+      return local !== null ? parseInt(local, 10) : TRIAL_TOKENS;
     }
-
-    return tokens;
+    const total = balance.subscription_tokens + balance.topup_tokens;
+    await AsyncStorage.setItem('symponia_tokens', String(total));
+    return total;
   } catch {
-    // Network failure — fall back to local
+    // Network failure — fall back to last known local value.
     const local = await AsyncStorage.getItem('symponia_tokens');
     return local !== null ? parseInt(local, 10) : TRIAL_TOKENS;
   }
@@ -104,26 +67,13 @@ export async function checkSubscription(): Promise<boolean> {
   }
 }
 
-// Add tokens to the user's balance (e.g. after subscription renewal).
-export async function addTokens(amount: number): Promise<number> {
-  try {
-    const localStr = await AsyncStorage.getItem('symponia_tokens');
-    const current = localStr !== null ? parseInt(localStr, 10) : 0;
-    const next = current + amount;
-    await AsyncStorage.setItem('symponia_tokens', String(next));
-    await upsertTokens(next);
-    return next;
-  } catch {
-    return amount;
-  }
-}
-
-// Call after each message is sent.
+// Optimistic local-only update for instant UI right after a reflection. The server
+// has already deducted the real balance; the next syncTokens() call reconciles.
+// Intentionally does NOT write to the server (that is the oracle's job).
 export async function deductToken(newBalance: number): Promise<void> {
   try {
-    await AsyncStorage.setItem('symponia_tokens', String(newBalance));
-    await upsertTokens(newBalance);
+    await AsyncStorage.setItem('symponia_tokens', String(Math.max(0, newBalance)));
   } catch {
-    // Swallow — local already written
+    // Ignore — the server remains the source of truth.
   }
 }

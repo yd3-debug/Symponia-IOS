@@ -179,6 +179,8 @@ export default function SignInScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="next"
+                textContentType="username"
+                autoComplete="email"
                 autoFocus
               />
 
@@ -195,6 +197,8 @@ export default function SignInScreen() {
                   autoCorrect={false}
                   returnKeyType="done"
                   onSubmitEditing={signIn}
+                  textContentType="password"
+                  autoComplete="password"
                 />
                 <TouchableOpacity
                   onPress={() => setShowPassword(v => !v)}

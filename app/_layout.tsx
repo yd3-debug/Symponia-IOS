@@ -30,6 +30,17 @@ async function migrateDeprecatedKeys() {
   await AsyncStorage.setItem('symponia_drefl_migration_v2', 'done');
 }
 
+// Weekly/monthly reflections were removed — only the daily notification remains.
+// Cancel any previously-scheduled weekly/monthly notifications and clear their prefs.
+async function migrateRemoveWeeklyMonthly() {
+  const done = await AsyncStorage.getItem('symponia_remove_wm_v1');
+  if (done === 'done') return;
+  await Notifications.cancelScheduledNotificationAsync('symponia-weekly').catch(() => {});
+  await Notifications.cancelScheduledNotificationAsync('symponia-monthly').catch(() => {});
+  await AsyncStorage.multiRemove(['symponia_notif_weekly', 'symponia_notif_monthly']);
+  await AsyncStorage.setItem('symponia_remove_wm_v1', 'done');
+}
+
 // Restores symponia_notif_daily for users whose preference was wiped by the
 // old SIGNED_IN bug (fixed in 9ef452c). Only runs once, only acts when the
 // flag is absent AND the user already has iOS permission + archetypes set.
@@ -347,6 +358,7 @@ function AppShell() {
       .then(() => migrateRestoreNotificationPref())
       .then(() => maybeTopUpDailyReflections());
     migrateDeprecatedKeys();
+    migrateRemoveWeeklyMonthly();
     AsyncStorage.setItem('symponia_last_app_open', new Date().toISOString());
 
     return () => {

@@ -9,8 +9,10 @@ import { clearAllConversations } from '@/services/conversations';
 import { checkSubscription, syncTokens } from '@/services/supabaseTokens';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
+import Constants from 'expo-constants';
 import { router, useFocusEffect } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { CoachTips, useFirstTip, resetAllTips } from '@/components/CoachTip';
 import {
   Alert,
   AppState,
@@ -119,62 +121,70 @@ function AIConsentRow({ colors }: { colors: any }) {
     AsyncStorage.getItem('symponia_ai_consent').then(setStatus);
   }, []);
 
-  const isRevoked = status === 'revoked';
+  // While still loading (null), treat as consented so we don't flash a warning.
+  const consented = status === null || status === 'true';
+
+  const enable = async () => {
+    await AsyncStorage.setItem('symponia_ai_consent', 'true');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) await supabase.from('profiles').update({ ai_consent: true }).eq('user_id', session.user.id);
+    } catch {}
+    setStatus('true');
+  };
+  const revoke = async () => {
+    await AsyncStorage.setItem('symponia_ai_consent', 'revoked');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) await supabase.from('profiles').update({ ai_consent: false }).eq('user_id', session.user.id);
+    } catch {}
+    setStatus('revoked');
+  };
 
   const toggle = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (isRevoked) {
+    if (!consented) {
       Alert.alert(
-        'Re-enable AI processing?',
-        "Symponia will send your messages to Anthropic's Claude to generate reflections.",
-        [
-          { text: 'cancel', style: 'cancel' },
-          {
-            text: 're-enable',
-            onPress: async () => {
-              await AsyncStorage.setItem('symponia_ai_consent', 'true');
-              try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (session?.user) {
-                  await supabase.from('profiles').update({ ai_consent: true }).eq('user_id', session.user.id);
-                }
-              } catch {}
-              setStatus('true');
-            },
-          },
-        ],
+        'Turn on AI processing?',
+        "Symponia will send your messages to Anthropic's Claude to generate your reflections.",
+        [{ text: 'cancel', style: 'cancel' }, { text: 'turn on', onPress: enable }],
       );
     } else {
       Alert.alert(
         'Revoke AI processing consent?',
-        "This will disable chat features. Your messages will no longer be sent to Anthropic's Claude. You can re-enable at any time.",
-        [
-          { text: 'cancel', style: 'cancel' },
-          {
-            text: 'revoke',
-            style: 'destructive',
-            onPress: async () => {
-              await AsyncStorage.setItem('symponia_ai_consent', 'revoked');
-              try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (session?.user) {
-                  await supabase.from('profiles').update({ ai_consent: false }).eq('user_id', session.user.id);
-                }
-              } catch {}
-              setStatus('revoked');
-            },
-          },
-        ],
+        "This turns off chat and reflections — your messages will no longer be sent to Anthropic's Claude. You can turn it back on here anytime.",
+        [{ text: 'cancel', style: 'cancel' }, { text: 'revoke', style: 'destructive', onPress: revoke }],
       );
     }
   };
 
   return (
-    <TouchableOpacity style={styles.linkRow} onPress={toggle} activeOpacity={0.7}>
-      <Text style={[styles.linkText, { color: isRevoked ? '#e07070' : colors.textSub }]}>
-        {isRevoked ? 're-enable AI processing' : 'revoke AI processing consent'}
+    <TouchableOpacity
+      onPress={toggle}
+      activeOpacity={0.75}
+      style={{
+        borderWidth: 0.5,
+        borderRadius: 14,
+        paddingVertical: 13,
+        paddingHorizontal: 14,
+        borderColor: consented ? colors.glassBorder : 'rgba(224,112,112,0.5)',
+        backgroundColor: consented ? 'transparent' : 'rgba(224,112,112,0.08)',
+      }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: consented ? colors.green : '#e07070' }} />
+        <Text style={{ fontSize: 13, fontFamily: FONT, fontWeight: '500', color: consented ? colors.text : '#c75a5a' }}>
+          {consented ? 'AI processing is on' : 'AI processing is off'}
+        </Text>
+      </View>
+      <Text style={{ fontSize: 12, fontFamily: FONT, fontWeight: '400', lineHeight: 18, color: colors.textSub }}>
+        {consented
+          ? "Symponia sends your messages to Anthropic's Claude to create your reflections. You can revoke this anytime."
+          : "Chat and daily reflections won't work while this is off — your messages can't be sent to Anthropic's Claude. You can turn it back on right here."}
       </Text>
-      <Text style={[styles.linkChevron, { color: colors.textDim }]}>›</Text>
+      <Text style={{ fontSize: 12, fontFamily: FONT, fontWeight: '500', letterSpacing: 0.3, marginTop: 9, color: colors.cyan }}>
+        {consented ? 'revoke consent →' : 'turn on AI processing →'}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -205,6 +215,22 @@ export default function ProfiloScreen() {
   const [subProducts, setSubProducts] = useState<{ productId: string; localizedPrice: string }[]>([]);
   const [pricesError, setPricesError] = useState(false);
   const [userAnimals, setUserAnimals] = useState<string[]>([]);
+  const [userEmail, setUserEmail] = useState('');
+  const archRef = useRef<View>(null);
+  const settingsTip = useFirstTip('settings');
+
+  // Signed-in email — read from the user's own local auth session, never a lookup,
+  // so it is only ever their own address (private to this device/account).
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (active) setUserEmail(data.session?.user?.email ?? '');
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setUserEmail(session?.user?.email ?? '');
+    });
+    return () => { active = false; sub.subscription.unsubscribe(); };
+  }, []);
 
   const loadPrices = useCallback(() => {
     setPricesError(false);
@@ -497,54 +523,42 @@ export default function ProfiloScreen() {
         {/* ── YOUR ARCHETYPES ── */}
         {userAnimals.length > 0 && (
           <Section index={2}>
-            <View style={cardStyle}>
+            <View ref={archRef} collapsable={false} style={cardStyle}>
               <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
               <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
               <View style={styles.cardPad}>
                 <Text style={[styles.sectionLabel, { color: colors.textDim }]}>YOUR ARCHETYPES</Text>
+                <Text style={[styles.sectionSub, { color: colors.textDim, marginBottom: 6 }]}>
+                  the seven that shape how Symponia reflects with you
+                </Text>
                 {userAnimals.map((animal, i) => {
-                  const key = animal.toLowerCase().trim();
-                  const arc = ANIMAL_ARCHETYPES[key];
                   const isShadow = i === 6;
-                  const accentColor = isShadow ? colors.violet : colors.cyan;
-                  const accentDim = isShadow ? colors.violetDim : colors.cyanDim;
+                  const emoji = ANIMAL_EMOJI[animal] ?? ANIMAL_EMOJI[animal.charAt(0).toUpperCase() + animal.slice(1).toLowerCase()] ?? '🐾';
                   return (
-                    <View key={i} style={[styles.zooCard, { borderColor: isShadow ? colors.glassBorderStrong : colors.glassBorder, backgroundColor: accentDim }]}>
-                      {/* Animal header */}
-                      <View style={styles.zooCardHeader}>
-                        <Text style={styles.zooCardEmoji}>{ANIMAL_EMOJI[animal] ?? ANIMAL_EMOJI[animal.charAt(0).toUpperCase() + animal.slice(1).toLowerCase()] ?? '🐾'}</Text>
-                        <View style={styles.zooCardMeta}>
-                          <Text style={[styles.zooCardName, { color: accentColor }]}>{animal.toUpperCase()}</Text>
-                          <Text style={[styles.zooCardRank, { color: isShadow ? colors.violet : colors.textDim }]}>
-                            {i + 1} · {ZOO_LABELS[i]?.toUpperCase()}
-                          </Text>
-                        </View>
-                      </View>
-                      {arc ? (
-                        <View style={styles.zooCardBody}>
-                          <View style={[styles.zooLayer, { borderLeftColor: accentColor }]}>
-                            <Text style={[styles.zooLayerLabel, { color: colors.textDim }]}>GIFT</Text>
-                            <Text style={[styles.zooLayerText, { color: colors.text }]}>{arc.gift}</Text>
-                          </View>
-                          <View style={[styles.zooLayer, { borderLeftColor: colors.red }]}>
-                            <Text style={[styles.zooLayerLabel, { color: colors.textDim }]}>SHADOW</Text>
-                            <Text style={[styles.zooLayerText, { color: colors.text }]}>{arc.shadow}</Text>
-                          </View>
-                          <View style={[styles.zooLayer, { borderLeftColor: colors.green }]}>
-                            <Text style={[styles.zooLayerLabel, { color: colors.textDim }]}>PATH</Text>
-                            <Text style={[styles.zooLayerText, { color: colors.text }]}>{arc.path}</Text>
-                          </View>
-                        </View>
-                      ) : null}
+                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 7 }}>
+                      <Text style={{ fontSize: 22 }}>{emoji}</Text>
+                      <Text style={{ flex: 1, fontSize: 14, fontFamily: FONT, fontWeight: '400', color: colors.text }}>
+                        {animal.charAt(0).toUpperCase() + animal.slice(1).toLowerCase()}
+                      </Text>
+                      <Text style={{ fontSize: 11, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.5, color: isShadow ? colors.violet : colors.textDim }}>
+                        {ZOO_LABELS[i]}
+                      </Text>
                     </View>
                   );
                 })}
                 <TouchableOpacity
+                  onPress={() => router.navigate('/archetype')}
+                  activeOpacity={0.7}
+                  style={[styles.zooUpdateBtn, { marginTop: 12 }]}
+                >
+                  <Text style={[styles.zooUpdateText, { color: colors.cyan }]}>view your archetype →</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
                   onPress={() => router.navigate('/update-animals')}
                   activeOpacity={0.7}
-                  style={[styles.zooUpdateBtn, { marginTop: 8 }]}
+                  style={[styles.zooUpdateBtn, { marginTop: 6 }]}
                 >
-                  <Text style={[styles.zooUpdateText, { color: colors.cyan }]}>update animals →</Text>
+                  <Text style={[styles.zooUpdateText, { color: colors.textSub }]}>update animals →</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -794,13 +808,11 @@ export default function ProfiloScreen() {
               <Text style={[styles.sectionLabel, { color: colors.textDim }]}>REFLECTIONS</Text>
               {(
                 [
-                  { label: 'daily',   value: notifDaily,   setter: setNotifDaily,   scheduler: scheduleDaily },
-                  { label: 'weekly',  value: notifWeekly,  setter: setNotifWeekly,  scheduler: scheduleWeekly },
-                  { label: 'monthly', value: notifMonthly, setter: setNotifMonthly, scheduler: scheduleMonthly },
+                  { label: 'daily', display: 'daily reflection', value: notifDaily, setter: setNotifDaily, scheduler: scheduleDaily },
                 ] as const
-              ).map(({ label, value, setter, scheduler }) => (
+              ).map(({ label, display, value, setter, scheduler }) => (
                 <View key={label} style={[styles.rowBetween, styles.notifRow]}>
-                  <Text style={[styles.settingLabel, { color: colors.textSub }]}>{label}</Text>
+                  <Text style={[styles.settingLabel, { color: colors.textSub }]}>{display}</Text>
                   <Toggle
                     value={value}
                     onValueChange={() => toggleNotif(label, value, setter as (v: boolean) => void, scheduler)}
@@ -875,6 +887,15 @@ export default function ProfiloScreen() {
             <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
             <View style={styles.cardPad}>
               <Text style={[styles.sectionLabel, { color: colors.textDim }]}>ACCOUNT</Text>
+              {userEmail ? (
+                <Text
+                  style={[styles.sectionSub, { color: colors.textSub }]}
+                  numberOfLines={1}
+                  ellipsizeMode="middle"
+                >
+                  signed in as {userEmail}
+                </Text>
+              ) : null}
               <Text style={[styles.sectionSub, { color: colors.textDim }]}>
                 erase your saved conversations with Symponia
               </Text>
@@ -993,6 +1014,22 @@ export default function ProfiloScreen() {
           </View>
         </Section>
 
+        {/* ── SHOW TIPS AGAIN ── */}
+        <Section index={9}>
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              resetAllTips().then(() => {
+                Alert.alert('Tips reset', 'The guided tips will show again next time you open each screen.', [{ text: 'OK' }]);
+              });
+            }}
+            activeOpacity={0.7}
+            style={{ borderWidth: 0.5, borderColor: colors.glassBorder, borderRadius: 14, paddingVertical: 14, alignItems: 'center' }}
+          >
+            <Text style={{ color: colors.cyan, fontSize: 13, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.3 }}>show guided tips again</Text>
+          </TouchableOpacity>
+        </Section>
+
         {/* ── FOOTER ── */}
         <Animated.View entering={FadeIn.duration(300).delay(350)} style={styles.footerWrap}>
           <Image
@@ -1001,10 +1038,23 @@ export default function ProfiloScreen() {
             resizeMode="contain"
           />
           <Text style={[styles.footerName, { color: colors.cyan }]}>SYMPONIA</Text>
-          <Text style={[styles.footerVersion, { color: colors.textDim }]}>version 1.0.1</Text>
+          <Text style={[styles.footerVersion, { color: colors.textDim }]}>{`version ${Constants.expoConfig?.version ?? '1.0.1'}`}</Text>
         </Animated.View>
 
       </ScrollView>
+
+      {settingsTip.visible && userAnimals.length > 0 && (
+        <CoachTips
+          tipKey="settings"
+          steps={[{
+            title: 'your archetype lives here',
+            body: "See each animal's gift, shadow, and path — and reshape your archetype, voice, and theme anytime.",
+            target: archRef,
+            place: 'above',
+          }]}
+          onClose={settingsTip.dismiss}
+        />
+      )}
     </View>
   );
 }

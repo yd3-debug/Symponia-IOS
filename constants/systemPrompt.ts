@@ -1,5 +1,26 @@
 // ── Animal archetype lookup (compact: gift · shadow · path) ───────────────────
 
+export const ANIMAL_EMOJI: Record<string, string> = {
+  Lion: '🦁', Tiger: '🐅', Leopard: '🐆', Panther: '🐈‍⬛', Wolf: '🐺', Fox: '🦊', Dog: '🐕', Cat: '🐈',
+  Bear: '🐻', Panda: '🐼', Koala: '🐨', Gorilla: '🦍',
+  Horse: '🐎', Deer: '🦌', Bison: '🦬', Giraffe: '🦒', Zebra: '🦓',
+  Elephant: '🐘', Rhino: '🦏', Hippo: '🦛', Boar: '🐗', Kangaroo: '🦘',
+  Raccoon: '🦝', Otter: '🦦', Badger: '🦡', Hedgehog: '🦔',
+  Rabbit: '🐇', Squirrel: '🐿️', Beaver: '🦫', Bat: '🦇',
+  Eagle: '🦅', Owl: '🦉', Peacock: '🦚', Parrot: '🦜',
+  Crow: '🐦‍⬛', Flamingo: '🦩', Swan: '🦢', Dove: '🕊️', Penguin: '🐧',
+  Whale: '🐋', Dolphin: '🐬', Shark: '🦈', Octopus: '🐙', Seal: '🦭',
+  Snake: '🐍', Crocodile: '🐊', Turtle: '🐢', Lizard: '🦎', Frog: '🐸',
+  Butterfly: '🦋', Bee: '🐝', Spider: '🕷️', Scorpion: '🦂', Cheetah: '🐆',
+};
+
+export function emojiForAnimal(name: string): string {
+  if (!name) return '🐾';
+  return ANIMAL_EMOJI[name]
+    ?? ANIMAL_EMOJI[name.charAt(0).toUpperCase() + name.slice(1).toLowerCase()]
+    ?? '🐾';
+}
+
 export const ANIMAL_ARCHETYPES: Record<string, { gift: string; shadow: string; path: string }> = {
   lion:      { gift: 'Radiant authority; warmth that draws without demand', shadow: 'Ego inflation; the roar that hides the wound', path: 'Let tenderness speak before power does' },
   tiger:     { gift: 'Complete presence in action; explosive force wasted on nothing', shadow: 'Volatility that destroys what it pursues; cannot share the kill', path: 'Choose when to strike — and when to still the body' },
