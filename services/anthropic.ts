@@ -53,7 +53,6 @@ function streamSSE(
     const token = await getValidToken();
     if (!token) {
       onError?.(new Error('Session expired. Please sign in again.'));
-      onComplete('Session expired. Please sign in again.');
       return;
     }
 
@@ -77,7 +76,6 @@ function streamSSE(
         if (err.includes('Auth failed') || err.includes('Unauthorized') || err.includes('missing sub claim')) {
           supabase.auth.signOut().then(() => {
             onError?.(new Error('Session corrupted. Logging you out...'));
-            onComplete('Session corrupted. Logging you out...');
             // Need to require router inline to avoid circular dependencies if any
             const { router } = require('expo-router');
             router.replace('/onboarding');
@@ -124,14 +122,11 @@ export function streamChat(
     messages,
   };
 
+  // Route ALL errors to the caller's onError — never through onComplete/onToken.
+  // A failed request must never look like a real answer, or the chat screen would
+  // charge a reflection (and save/haptic) for a message that never got a response.
   return streamSSE(body, onToken, onComplete, (err) => {
-    if (err.message === 'AI_CONSENT_REQUIRED') {
-      onError?.(err);
-      onComplete('');
-      return;
-    }
-    onToken(err.message);
-    onComplete(err.message);
+    onError?.(err);
   });
 }
 

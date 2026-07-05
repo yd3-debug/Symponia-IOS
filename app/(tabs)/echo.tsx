@@ -735,6 +735,11 @@ export default function DialogoScreen() {
         await AsyncStorage.setItem('symponia_echo_nodes', JSON.stringify([...parsed, node]));
       },
       (err) => {
+        // Every failure lands here (never in onComplete), so a message that
+        // didn't get an answer never charges a reflection.
+        clearInterval(heartbeat);
+        setIsStreaming(false);
+
         if (err.message === 'AI_CONSENT_REQUIRED') {
           setMessages((prev) => prev.filter((m) => m.id !== botId));
           Alert.alert(
@@ -742,7 +747,17 @@ export default function DialogoScreen() {
             'You have not granted permission for AI processing. Enable it in Profile → Data & Account.',
             [{ text: 'OK' }],
           );
+          return;
         }
+
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        const isNetwork = /network|current shifted|unreachable/i.test(err.message);
+        const friendly = isNetwork
+          ? 'I couldn’t reach you just now — check your connection and tap send again. No reflection was used.'
+          : err.message;
+        setMessages((prev) =>
+          prev.map((m) => (m.id === botId ? { ...m, text: friendly } : m)),
+        );
       },
     );
 
