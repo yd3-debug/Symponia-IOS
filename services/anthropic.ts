@@ -1,5 +1,6 @@
 import { SUPABASE_URL } from '@/constants/config';
 import { supabase } from './supabase';
+import { buildMemoryContext } from './memory';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Keep only the last MAX_HISTORY_TURNS user+assistant pairs to bound input tokens.
@@ -107,27 +108,45 @@ export function streamChat(
   onComplete: (full: string) => void,
   onError?: (err: Error) => void,
 ): () => void {
-  // Trim to the last MAX_HISTORY_TURNS pairs before appending the new message.
-  const trimmed = history.slice(-MAX_HISTORY_TURNS * 2);
-  const messages: Message[] = [
-    ...trimmed,
-    { role: 'user', content: userInput },
-  ];
+  let cancel = () => {};
+  let cancelled = false;
 
-  const body = {
-    model: 'claude-sonnet-4-6',
-    max_tokens: 500,
-    mode,
-    resonanceFrequency,
-    messages,
-  };
+  (async () => {
+    // Trim to the last MAX_HISTORY_TURNS pairs before appending the new message.
+    const trimmed = history.slice(-MAX_HISTORY_TURNS * 2);
 
-  // Route ALL errors to the caller's onError — never through onComplete/onToken.
-  // A failed request must never look like a real answer, or the chat screen would
-  // charge a reflection (and save/haptic) for a message that never got a response.
-  return streamSSE(body, onToken, onComplete, (err) => {
-    onError?.(err);
-  });
+    // On the first turn of a session, fold in a short recall block from past
+    // reflections (only if the user opted into memory). This rides in the user
+    // message and never touches the caller's saved/displayed history.
+    let content = userInput;
+    if (history.length === 0) {
+      try {
+        const memory = await buildMemoryContext();
+        if (memory) content = `${memory}\n\n${userInput}`;
+      } catch {}
+    }
+
+    if (cancelled) return;
+
+    const messages: Message[] = [...trimmed, { role: 'user', content }];
+
+    const body = {
+      model: 'claude-sonnet-4-6',
+      max_tokens: 500,
+      mode,
+      resonanceFrequency,
+      messages,
+    };
+
+    // Route ALL errors to the caller's onError — never through onComplete/onToken.
+    // A failed request must never look like a real answer, or the chat screen would
+    // charge a reflection (and save/haptic) for a message that never got a response.
+    cancel = streamSSE(body, onToken, onComplete, (err) => {
+      onError?.(err);
+    });
+  })();
+
+  return () => { cancelled = true; cancel(); };
 }
 
 export class RateLimitError extends Error {

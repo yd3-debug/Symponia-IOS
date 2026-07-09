@@ -144,10 +144,11 @@ async function ensureProfileRow(user: { id: string; email?: string | null }) {
     return;
   }
 
-  await supabase.from('profiles').upsert(
+  const { error: selfHealErr } = await supabase.from('profiles').upsert(
     { email: user.email, user_id: user.id, topup_tokens: TRIAL_TOKENS },
     { onConflict: 'email', ignoreDuplicates: true },
-  ).catch((err: any) => console.warn('[SelfHeal] Upsert failed:', err?.message));
+  );
+  if (selfHealErr) console.warn('[SelfHeal] Upsert failed:', selfHealErr.message);
 }
 
 // Global IAP purchase handler — single source of truth for server verification.

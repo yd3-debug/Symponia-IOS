@@ -4,6 +4,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
+import { isMemoryEnabled } from './memory';
 
 export interface ChatMessage {
   id: string;
@@ -32,9 +33,10 @@ export async function loadConversation(mode: string): Promise<ChatMessage[]> {
       .eq('mode', mode)
       .maybeSingle();
 
-    if (data?.messages?.length > 0) {
-      await AsyncStorage.setItem(localKey(mode), JSON.stringify(data.messages));
-      return data.messages as ChatMessage[];
+    const msgs = data?.messages as ChatMessage[] | undefined;
+    if (msgs && msgs.length > 0) {
+      await AsyncStorage.setItem(localKey(mode), JSON.stringify(msgs));
+      return msgs;
     }
   } catch {}
 
@@ -48,6 +50,10 @@ export async function saveConversation(mode: string, messages: ChatMessage[]): P
   try {
     await AsyncStorage.setItem(localKey(mode), JSON.stringify(toSave));
   } catch {}
+
+  // Remote storage happens ONLY when the user has opted into memory. When memory is off,
+  // nothing is written to the server, keeping the "nothing stored on our servers" promise true.
+  if (!(await isMemoryEnabled())) return;
 
   // Remote — fire and forget, tied to the user's account
   try {

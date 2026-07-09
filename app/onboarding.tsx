@@ -1,6 +1,7 @@
 import { useTheme } from '@/constants/ThemeContext';
 import { TRIAL_TOKENS } from '@/constants/config';
 import { supabase } from '@/services/supabase';
+import { setMemoryEnabled } from '@/services/memory';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
@@ -515,12 +516,13 @@ function passwordStrength(pw: string): { score: number; label: string; color: st
 
 // ── Step: Legal ───────────────────────────────────────────────────────────────
 
-function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agreedTerms, setAgreedTerms, agreedMarketing, setAgreedMarketing, onComplete, authError }: {
+function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agreedTerms, setAgreedTerms, agreedMarketing, setAgreedMarketing, agreedMemory, setAgreedMemory, onComplete, authError }: {
   colors: any; isDark: boolean;
   email: string; setEmail: (v: string) => void;
   password: string; setPassword: (v: string) => void;
   agreedTerms: boolean; setAgreedTerms: (v: boolean) => void;
   agreedMarketing: boolean; setAgreedMarketing: (v: boolean) => void;
+  agreedMemory: boolean; setAgreedMemory: (v: boolean) => void;
   onComplete: () => void;
   authError: string;
 }) {
@@ -660,8 +662,20 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
         </Text>
       </Pressable>
 
+      <Pressable
+        style={styles.checkRow}
+        onPress={() => { setAgreedMemory(!agreedMemory); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+      >
+        <View style={[styles.checkbox, { borderColor: agreedMemory ? colors.cyan : colors.glassBorder }, agreedMemory && { backgroundColor: colors.cyanDim }]}>
+          {agreedMemory && <Text style={[styles.checkMark, { color: colors.cyan }]}>✓</Text>}
+        </View>
+        <Text style={[styles.checkText, { color: colors.textSub }]}>
+          Let Symponia remember, so it can hold the thread of your journey over time. Only you can ever see your reflections — private, encrypted, never sold, never used to train AI. Turn it off and erase everything anytime (optional)
+        </Text>
+      </Pressable>
+
       <Text style={[styles.gdprNote, { color: colors.textDim }]}>
-        {"Your messages are processed by Anthropic's Claude to\ngenerate responses. We never sell your data.\nSee Privacy Policy for full details."}
+        {"Your messages are processed by Anthropic's Claude under Zero\nData Retention. If memory is off, nothing is stored on our\nservers. We never sell your data. See Privacy Policy for details."}
       </Text>
 
       <Text style={[styles.stepHint, { color: colors.textSub, textAlign: 'center', marginTop: 8, marginBottom: 4, lineHeight: 20 }]}>
@@ -995,6 +1009,7 @@ export default function OnboardingScreen() {
   const [password, setPassword] = useState('');
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [agreedMarketing, setAgreedMarketing] = useState(false);
+  const [agreedMemory, setAgreedMemory] = useState(false);
   const [showAIConsent, setShowAIConsent] = useState(false);
   const [showWeaving, setShowWeaving] = useState(false);
   const [attune, setAttune] = useState<number[]>([]);
@@ -1048,6 +1063,10 @@ export default function OnboardingScreen() {
       ['symponia_tokens', String(TRIAL_TOKENS)],
       ['symponia_attune', JSON.stringify(attune)],
     ]);
+
+    // Records the memory choice locally (always) and mirrors to profiles.memory_enabled
+    // (best-effort; no-op until the column migration is applied). Default is off.
+    await setMemoryEnabled(agreedMemory);
 
     setIsSubmitting(false);
     setShowAIConsent(true);
@@ -1154,6 +1173,8 @@ export default function OnboardingScreen() {
             setAgreedTerms={setAgreedTerms}
             agreedMarketing={agreedMarketing}
             setAgreedMarketing={setAgreedMarketing}
+            agreedMemory={agreedMemory}
+            setAgreedMemory={setAgreedMemory}
             onComplete={complete}
             authError={authError}
           />

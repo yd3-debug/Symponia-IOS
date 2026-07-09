@@ -6,6 +6,7 @@ import * as Notifications from 'expo-notifications';
 import { requestNotificationPermission, scheduleDaily, scheduleMonthly, scheduleWeekly, topUpDailyReflections } from '@/services/notifications';
 import { restorePurchases, verifyAndFinishPurchase, initIAP, fetchStoreSubscriptions, triggerSubscription, SUBSCRIPTION_PRODUCTS, type ProductPurchase, type SubscriptionProductId } from '@/services/iap';
 import { clearAllConversations } from '@/services/conversations';
+import { setMemoryEnabled, syncMemoryFlag } from '@/services/memory';
 import { checkSubscription, syncTokens } from '@/services/supabaseTokens';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
@@ -216,6 +217,7 @@ export default function ProfiloScreen() {
   const [pricesError, setPricesError] = useState(false);
   const [userAnimals, setUserAnimals] = useState<string[]>([]);
   const [userEmail, setUserEmail] = useState('');
+  const [memoryOn, setMemoryOn] = useState(false);
   const archRef = useRef<View>(null);
   const settingsTip = useFirstTip('settings');
 
@@ -226,11 +228,55 @@ export default function ProfiloScreen() {
     supabase.auth.getSession().then(({ data }) => {
       if (active) setUserEmail(data.session?.user?.email ?? '');
     });
+    syncMemoryFlag().then((on) => { if (active) setMemoryOn(on); });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       setUserEmail(session?.user?.email ?? '');
     });
     return () => { active = false; sub.subscription.unsubscribe(); };
   }, []);
+
+  const toggleMemory = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!memoryOn) {
+      Alert.alert(
+        'Turn on memory?',
+        'Symponia will store your reflections securely so it can remember your journey and get to know you over time. Your reflections are never used to train AI, and you can turn this off and delete everything anytime.',
+        [
+          { text: 'not now', style: 'cancel' },
+          {
+            text: 'turn on',
+            onPress: async () => {
+              await setMemoryEnabled(true);
+              setMemoryOn(true);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            },
+          },
+        ],
+      );
+    } else {
+      Alert.alert(
+        'Turn off memory?',
+        'Symponia will stop storing new reflections. Would you also like to delete everything already stored?',
+        [
+          { text: 'cancel', style: 'cancel' },
+          {
+            text: 'turn off, keep stored',
+            onPress: async () => { await setMemoryEnabled(false); setMemoryOn(false); },
+          },
+          {
+            text: 'turn off and delete',
+            style: 'destructive',
+            onPress: async () => {
+              await setMemoryEnabled(false);
+              await clearAllConversations();
+              setMemoryOn(false);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            },
+          },
+        ],
+      );
+    }
+  };
 
   const loadPrices = useCallback(() => {
     setPricesError(false);
@@ -795,6 +841,29 @@ export default function ProfiloScreen() {
                   <Text style={[styles.subLegalLink, { color: colors.textDim }]}>terms of use</Text>
                 </TouchableOpacity>
               </View>
+            </View>
+          </View>
+        </Section>
+
+        {/* ── MEMORY ── */}
+        <Section index={5}>
+          <View style={cardStyle}>
+            <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
+            <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
+            <View style={styles.cardPad}>
+              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>MEMORY</Text>
+              <Text style={[styles.sectionSub, { color: colors.textDim }]}>
+                let Symponia hold the thread of your journey — only you can ever see your reflections
+              </Text>
+              <View style={[styles.rowBetween, styles.notifRow]}>
+                <Text style={[styles.settingLabel, { color: colors.textSub }]}>remember me</Text>
+                <Toggle value={memoryOn} onValueChange={toggleMemory} />
+              </View>
+              <Text style={[styles.sectionSub, { color: colors.textDim }]}>
+                {memoryOn
+                  ? 'on · private to you, encrypted, never sold or used to train AI.'
+                  : 'off · nothing leaves your device beyond each live reply.'}
+              </Text>
             </View>
           </View>
         </Section>

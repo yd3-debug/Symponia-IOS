@@ -6,6 +6,7 @@ import {
   restorePurchases,
   setupPurchaseListeners,
   triggerSubscription,
+  verifyAndFinishPurchase,
   type ProductPurchase,
   type SubscriptionProductId,
 } from '@/services/iap';
