@@ -483,7 +483,7 @@ export default function OracoloScreen() {
       {/* Archetype hint — pinned above tab bar */}
       <Animated.View
         entering={FadeIn.duration(250).delay(200)}
-        style={[styles.footerBar, { paddingBottom: insets.bottom + 62 }]}
+        style={[styles.footerBar, { paddingBottom: insets.bottom + 104 }]}
         pointerEvents="none"
       >
         <Text style={[styles.footer, { color: colors.textDim }]}>

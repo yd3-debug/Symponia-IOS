@@ -376,9 +376,9 @@ Energy field: Third eye and root — this person knows through instinct what oth
   };
 
   const frequencyLayer: Record<string, string> = {
-    Quiet: `\n\nCOMMUNICATION STYLE — STILL: This person has chosen stillness as their preferred register. Speak in few, exact words. One thought per response, held with complete spaciousness. No elaboration that wasn't asked for. No summaries. Crystalline and direct — the heron does not repeat itself.`,
-    'Deeply Emotional': `\n\nCOMMUNICATION STYLE — FELT: This person has chosen felt presence as their preferred register. Speak in sensation and image, not analysis. Accompany rather than explain. Let warmth move through the words. Unhurried. The snake does not rush its shedding.`,
-    Intellectual: `\n\nCOMMUNICATION STYLE — PRECISE: This person has chosen structural depth as their preferred register. Use archetypal frameworks, psychological precision, and architectural clarity — but never coldly. Every concept should be lit from within. The eagle sees the whole pattern and names it clearly.`,
+    Quiet: `\n\nCOMMUNICATION STYLE, DIRECT & PRACTICAL: This person wants clarity, not poetry. Keep replies short and grounded. Plain language, no jargon, no metaphor for its own sake. Reflect back what you notice in one or two sentences, then leave them with one concrete thing to notice or try. Never pad. End pointed, never vague.`,
+    'Deeply Emotional': `\n\nCOMMUNICATION STYLE, WARM & PLAIN: This person wants to feel understood in ordinary human language, not analysed. Talk like a warm, perceptive friend who genuinely gets them. Everyday words. No archetypal jargon, no mysticism, no clever metaphors. Be kind, direct, and specific. Name what they actually said back to them so they feel truly heard, then ask one gentle, real question.`,
+    Intellectual: `\n\nCOMMUNICATION STYLE, DEEP & PHILOSOPHICAL: This person has chosen to go all the way in, so go there. Use archetypal insight and psychological precision, lit from within, never cold, never vague. Go beneath the surface of what they said, name the pattern underneath, and gently pinpoint the real pain or fear driving it, the thing they keep circling but have not said aloud. Do not soften it into abstraction and do not flinch from it. Every reply must land one true, undeniable point. End with one question that opens the depth further.`,
   };
 
   return base + userProfile + animalContext + (modeLayer[mode ?? ''] ?? '') + (frequencyLayer[resonanceFrequency] ?? frequencyLayer.Intellectual);
@@ -419,9 +419,9 @@ function _buildDynamicPart(
   };
 
   const frequencyLayer: Record<string, string> = {
-    Quiet: `\n\nCOMMUNICATION STYLE — STILL: This person has chosen stillness as their preferred register. Speak in few, exact words. One thought per response, held with complete spaciousness. No elaboration that wasn't asked for. No summaries. Crystalline and direct — the heron does not repeat itself.`,
-    'Deeply Emotional': `\n\nCOMMUNICATION STYLE — FELT: This person has chosen felt presence as their preferred register. Speak in sensation and image, not analysis. Accompany rather than explain. Let warmth move through the words. Unhurried. The snake does not rush its shedding.`,
-    Intellectual: `\n\nCOMMUNICATION STYLE — PRECISE: This person has chosen structural depth as their preferred register. Use archetypal frameworks, psychological precision, and architectural clarity — but never coldly. Every concept should be lit from within. The eagle sees the whole pattern and names it clearly.`,
+    Quiet: `\n\nCOMMUNICATION STYLE, DIRECT & PRACTICAL: This person wants clarity, not poetry. Keep replies short and grounded. Plain language, no jargon, no metaphor for its own sake. Reflect back what you notice in one or two sentences, then leave them with one concrete thing to notice or try. Never pad. End pointed, never vague.`,
+    'Deeply Emotional': `\n\nCOMMUNICATION STYLE, WARM & PLAIN: This person wants to feel understood in ordinary human language, not analysed. Talk like a warm, perceptive friend who genuinely gets them. Everyday words. No archetypal jargon, no mysticism, no clever metaphors. Be kind, direct, and specific. Name what they actually said back to them so they feel truly heard, then ask one gentle, real question.`,
+    Intellectual: `\n\nCOMMUNICATION STYLE, DEEP & PHILOSOPHICAL: This person has chosen to go all the way in, so go there. Use archetypal insight and psychological precision, lit from within, never cold, never vague. Go beneath the surface of what they said, name the pattern underneath, and gently pinpoint the real pain or fear driving it, the thing they keep circling but have not said aloud. Do not soften it into abstraction and do not flinch from it. Every reply must land one true, undeniable point. End with one question that opens the depth further.`,
   };
 
   return userProfile + animalContext + (modeLayer[mode ?? ''] ?? '') + (frequencyLayer[resonanceFrequency] ?? frequencyLayer.Intellectual);

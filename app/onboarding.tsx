@@ -43,9 +43,9 @@ const GENDERS = [
 ] as const;
 
 const DEPTHS: { id: Frequency; label: string; desc: string }[] = [
-  { id: 'Deeply Emotional', label: 'felt',    desc: 'presence · imagery · the snake sheds its skin' },
-  { id: 'Intellectual',     label: 'precise', desc: 'structure · depth · the eagle holds the long view' },
-  { id: 'Quiet',            label: 'still',   desc: 'silence · few words · the heron simply waits' },
+  { id: 'Deeply Emotional', label: 'warm & plain',       desc: 'everyday words, gentle, like a friend who gets you' },
+  { id: 'Intellectual',     label: 'deep & philosophical', desc: 'goes deep, names the pattern, and pinpoints what hurts' },
+  { id: 'Quiet',            label: 'direct & practical', desc: 'short and grounded, one thing to notice' },
 ];
 
 const ANIMALS = [
@@ -664,6 +664,10 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
         {"Your messages are processed by Anthropic's Claude to\ngenerate responses. We never sell your data.\nSee Privacy Policy for full details."}
       </Text>
 
+      <Text style={[styles.stepHint, { color: colors.textSub, textAlign: 'center', marginTop: 8, marginBottom: 4, lineHeight: 20 }]}>
+        {`when you finish, you will have ${TRIAL_TOKENS} free reflections to begin with. take your time with them. if they run out and you want to keep going, you can add more whenever you are ready.`}
+      </Text>
+
       <TouchableOpacity
         style={[
           styles.primaryBtn,
@@ -830,6 +834,11 @@ function AttuneStep({ colors, answers, setAnswers, onNext, onBack, onProgress }:
 
   return (
     <Animated.View key={idx} entering={FadeIn.duration(350)} style={styles.stepWrap}>
+      {idx === 8 && (
+        <Text style={[styles.stepHint, { color: colors.textSub, textAlign: 'center', marginBottom: 20, lineHeight: 21 }]}>
+          you are over halfway. most people find these stir up more than they expected. that is the point. keep going, gently.
+        </Text>
+      )}
       <View style={styles.stepHeader}>
         <Text style={[styles.stepLabel, { color: colors.textDim }]}>
           {`attuning · ${String(idx + 1).padStart(2, '0')} / ${total}`}

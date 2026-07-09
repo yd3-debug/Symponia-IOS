@@ -306,7 +306,7 @@ export default function ProfiloScreen() {
       if (type === 'daily') {
         // Show in-app pre-prompt before the iOS system dialog
         Alert.alert(
-          "A daily reflection, if you'd like one.",
+          "A daily notification, if you'd like one.",
           'Once a day, Symponia can send a short, centering thought shaped by your archetype. Nothing else.',
           [
             { text: 'Not now', style: 'cancel' },
@@ -805,10 +805,10 @@ export default function ProfiloScreen() {
             <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
             <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
             <View style={styles.cardPad}>
-              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>REFLECTIONS</Text>
+              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>NOTIFICATIONS</Text>
               {(
                 [
-                  { label: 'daily', display: 'daily reflection', value: notifDaily, setter: setNotifDaily, scheduler: scheduleDaily },
+                  { label: 'daily', display: 'daily notification', value: notifDaily, setter: setNotifDaily, scheduler: scheduleDaily },
                 ] as const
               ).map(({ label, display, value, setter, scheduler }) => (
                 <View key={label} style={[styles.rowBetween, styles.notifRow]}>
