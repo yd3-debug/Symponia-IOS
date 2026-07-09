@@ -2,6 +2,7 @@ import { useTheme } from '@/constants/ThemeContext';
 import { TRIAL_TOKENS } from '@/constants/config';
 import { supabase } from '@/services/supabase';
 import { setMemoryEnabled } from '@/services/memory';
+import { requestNotificationPermission, scheduleDaily } from '@/services/notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
@@ -20,7 +21,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming, Easing } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -31,7 +32,7 @@ const CELL_SIZE = (SCREEN_W - H_PAD * 2 - CELL_GAP * (COLS - 1)) / COLS;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Step = 'welcome' | 'attune' | 'name' | 'gender' | 'animals' | 'archetype' | 'depth' | 'legal';
+type Step = 'welcome' | 'depth' | 'attune' | 'name' | 'gender' | 'animals' | 'archetype' | 'memory' | 'notifications' | 'tokens' | 'legal';
 type Frequency = 'Quiet' | 'Intellectual' | 'Deeply Emotional';
 
 // ── Data ──────────────────────────────────────────────────────────────────────
@@ -662,24 +663,8 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
         </Text>
       </Pressable>
 
-      <Pressable
-        style={styles.checkRow}
-        onPress={() => { setAgreedMemory(!agreedMemory); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-      >
-        <View style={[styles.checkbox, { borderColor: agreedMemory ? colors.cyan : colors.glassBorder }, agreedMemory && { backgroundColor: colors.cyanDim }]}>
-          {agreedMemory && <Text style={[styles.checkMark, { color: colors.cyan }]}>✓</Text>}
-        </View>
-        <Text style={[styles.checkText, { color: colors.textSub }]}>
-          Let Symponia remember, so it can hold the thread of your journey over time. Only you can ever see your reflections — private, encrypted, never sold, never used to train AI. Turn it off and erase everything anytime (optional)
-        </Text>
-      </Pressable>
-
       <Text style={[styles.gdprNote, { color: colors.textDim }]}>
         {"Your messages are processed by Anthropic's Claude under Zero\nData Retention. If memory is off, nothing is stored on our\nservers. We never sell your data. See Privacy Policy for details."}
-      </Text>
-
-      <Text style={[styles.stepHint, { color: colors.textSub, textAlign: 'center', marginTop: 8, marginBottom: 4, lineHeight: 20 }]}>
-        {`when you finish, you will have ${TRIAL_TOKENS} free reflections to begin with. take your time with them. if they run out and you want to keep going, you can add more whenever you are ready.`}
       </Text>
 
       <TouchableOpacity
@@ -891,15 +876,40 @@ const ATTUNE_SETS: Record<Frequency, AttuneQ[]> = {
   ],
 };
 
+function AttuneInterstitial({ colors, onContinue }: { colors: any; onContinue: () => void }) {
+  return (
+    <Animated.View entering={FadeIn.duration(450)} style={styles.stepWrap}>
+      <View style={styles.welcomeCenter}>
+        <Text style={[styles.glyph, { color: colors.violet }]}>❖</Text>
+        <Text style={[styles.stepQuestion, { color: colors.text, textAlign: 'center' }]}>
+          {'you are\nhalfway'}
+        </Text>
+        <Text style={[styles.welcomeBody, { color: colors.textDim, textAlign: 'center' }]}>
+          {'most people find these questions stir up more\nthan they expected. that is the point. there are\nno wrong answers — only what is true for you.'}
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={[styles.primaryBtn, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder }]}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onContinue(); }}
+        activeOpacity={0.75}
+      >
+        <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>keep going</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
 function AttuneStep({ colors, tone, answers, setAnswers, onNext, onBack, onProgress }: {
   colors: any; tone: Frequency; answers: number[][]; setAnswers: (v: number[][]) => void;
   onNext: () => void; onBack: () => void; onProgress: (f: number) => void;
 }) {
   const QUESTIONS = ATTUNE_SETS[tone] ?? ATTUNE_SETS.Intellectual;
   const [idx, setIdx] = React.useState(0);
+  const [showInterstitial, setShowInterstitial] = React.useState(false);
+  const [interstitialShown, setInterstitialShown] = React.useState(false);
   const total = QUESTIONS.length;
+  const mid = Math.floor(total / 2);
 
-  // Report sub-progress so the global top bar advances through the questions.
   React.useEffect(() => {
     onProgress(total > 1 ? idx / (total - 1) : 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -922,6 +932,7 @@ function AttuneStep({ colors, tone, answers, setAnswers, onNext, onBack, onProgr
   const advance = () => {
     if (!hasAny) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (idx + 1 === mid && !interstitialShown) { setShowInterstitial(true); return; }
     if (idx < total - 1) setIdx(idx + 1);
     else onNext();
   };
@@ -932,15 +943,17 @@ function AttuneStep({ colors, tone, answers, setAnswers, onNext, onBack, onProgr
     else onBack();
   };
 
-  const mid = Math.floor(total / 2);
+  if (showInterstitial) {
+    return (
+      <AttuneInterstitial
+        colors={colors}
+        onContinue={() => { setShowInterstitial(false); setInterstitialShown(true); setIdx(mid); }}
+      />
+    );
+  }
 
   return (
     <Animated.View key={idx} entering={FadeIn.duration(350)} style={styles.stepWrap}>
-      {idx === mid && (
-        <Text style={[styles.stepHint, { color: colors.textSub, textAlign: 'center', marginBottom: 20, lineHeight: 21 }]}>
-          you are over halfway. most people find these stir up more than they expected. that is the point. keep going, gently.
-        </Text>
-      )}
       <View style={styles.stepHeader}>
         <Text style={[styles.stepLabel, { color: colors.textDim }]}>
           {`attuning · ${String(idx + 1).padStart(2, '0')} / ${total}`}
@@ -994,6 +1007,114 @@ function AttuneStep({ colors, tone, answers, setAnswers, onNext, onBack, onProgr
 
       <TouchableOpacity onPress={back} activeOpacity={0.65} style={styles.animalBackBtn}>
         <Text style={[styles.animalBackText, { color: colors.textDim }]}>← back</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+function MemoryStep({ colors, agreed, setAgreed, onNext }: {
+  colors: any; agreed: boolean; setAgreed: (v: boolean) => void; onNext: () => void;
+}) {
+  const choose = (v: boolean) => {
+    setAgreed(v);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    onNext();
+  };
+  return (
+    <Animated.View entering={FadeIn.duration(450)} style={styles.stepWrap}>
+      <View style={styles.welcomeCenter}>
+        <Text style={[styles.glyph, { color: colors.violet }]}>❖</Text>
+        <Text style={[styles.stepQuestion, { color: colors.text, textAlign: 'center' }]}>
+          {'should I\nremember you?'}
+        </Text>
+        <Text style={[styles.welcomeBody, { color: colors.textDim, textAlign: 'center' }]}>
+          {'I can hold the thread of your reflections over time,\nso this space deepens as it comes to know you.'}
+        </Text>
+        <Text style={[styles.stepHint, { color: colors.textSub, textAlign: 'center', marginTop: 14, lineHeight: 20 }]}>
+          only you can ever see them · private and encrypted{'\n'}never sold, never used to train AI
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={[styles.primaryBtn, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder }]}
+        onPress={() => choose(true)}
+        activeOpacity={0.75}
+      >
+        <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>yes, remember me</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.glassBorder }]} onPress={() => choose(false)} activeOpacity={0.7}>
+        <Text style={[styles.secondaryBtnText, { color: colors.textDim }]}>not now</Text>
+      </TouchableOpacity>
+      <Text style={[styles.stepHint, { color: colors.textDim, textAlign: 'center', marginTop: 10 }]}>
+        you can change this anytime, and erase everything
+      </Text>
+    </Animated.View>
+  );
+}
+
+function NotificationsStep({ colors, onEnable, onSkip }: {
+  colors: any; onEnable: () => void; onSkip: () => void;
+}) {
+  return (
+    <Animated.View entering={FadeIn.duration(450)} style={styles.stepWrap}>
+      <View style={styles.welcomeCenter}>
+        <Text style={[styles.glyph, { color: colors.violet }]}>❖</Text>
+        <Text style={[styles.stepQuestion, { color: colors.text, textAlign: 'center' }]}>
+          {'one quiet\nmoment a day'}
+        </Text>
+        <Text style={[styles.welcomeBody, { color: colors.textDim, textAlign: 'center' }]}>
+          {'A short daily reflection can arrive on your lock screen —\na small, private prompt to pause and return to yourself.\nNo noise. Just one gentle nudge inward.'}
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={[styles.primaryBtn, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder }]}
+        onPress={onEnable}
+        activeOpacity={0.75}
+      >
+        <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>enable reminders</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.glassBorder }]} onPress={onSkip} activeOpacity={0.7}>
+        <Text style={[styles.secondaryBtnText, { color: colors.textDim }]}>maybe later</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+function TokensStep({ colors, onNext }: { colors: any; onNext: () => void }) {
+  const pulse = useSharedValue(1);
+  React.useEffect(() => {
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(1.07, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+      ),
+      -1,
+      false,
+    );
+  }, []);
+  const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
+
+  return (
+    <Animated.View entering={FadeIn.duration(450)} style={styles.stepWrap}>
+      <View style={styles.welcomeCenter}>
+        <Animated.View style={[styles.tokenOrb, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder }, pulseStyle]}>
+          <Text style={[styles.tokenNumber, { color: colors.cyan }]}>{TRIAL_TOKENS}</Text>
+        </Animated.View>
+        <Text style={[styles.stepQuestion, { color: colors.text, textAlign: 'center', marginTop: 26 }]}>
+          {'reflections,\nto begin with'}
+        </Text>
+        <Text style={[styles.welcomeBody, { color: colors.textDim, textAlign: 'center' }]}>
+          {`you start with ${TRIAL_TOKENS} free reflections. take your time with\nthem — nothing is charged now, and nothing renews on its own.`}
+        </Text>
+        <Text style={[styles.stepHint, { color: colors.textSub, textAlign: 'center', marginTop: 14, lineHeight: 20 }]}>
+          if they run out and you want to keep going,{'\n'}you choose to add more — never automatically.
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={[styles.primaryBtn, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder }]}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onNext(); }}
+        activeOpacity={0.75}
+      >
+        <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>begin</Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -1081,7 +1202,7 @@ function ArchetypeInfoStep({ colors, isDark, onNext, onBack }: {
 
 // ── Onboarding ────────────────────────────────────────────────────────────────
 
-const STEPS: Step[] = ['welcome', 'depth', 'attune', 'name', 'gender', 'animals', 'archetype', 'legal'];
+const STEPS: Step[] = ['welcome', 'depth', 'attune', 'name', 'gender', 'animals', 'archetype', 'memory', 'notifications', 'tokens', 'legal'];
 
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
@@ -1098,6 +1219,7 @@ export default function OnboardingScreen() {
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [agreedMarketing, setAgreedMarketing] = useState(false);
   const [agreedMemory, setAgreedMemory] = useState(false);
+  const [notifEnabled, setNotifEnabled] = useState(false);
   const [showAIConsent, setShowAIConsent] = useState(false);
   const [showWeaving, setShowWeaving] = useState(false);
   const [attune, setAttune] = useState<number[][]>([]);
@@ -1155,6 +1277,7 @@ export default function OnboardingScreen() {
     // Records the memory choice locally (always) and mirrors to profiles.memory_enabled
     // (best-effort; no-op until the column migration is applied). Default is off.
     await setMemoryEnabled(agreedMemory);
+    try { await scheduleDaily(notifEnabled); } catch {}
 
     setIsSubmitting(false);
     setShowAIConsent(true);
@@ -1247,6 +1370,9 @@ export default function OnboardingScreen() {
         {step === 'gender'  && <GenderStep key="gender" colors={colors} gender={gender} setGender={setGender} onNext={goNext} />}
         {step === 'animals' && <AnimalsStep key="animals" colors={colors} animals={animals} setAnimals={setAnimals} cols={animalCols} setCols={setAnimalCols} onNext={goNext} onBack={() => setStep('gender')} />}
         {step === 'archetype' && <ArchetypeInfoStep key="archetype" colors={colors} isDark={isDark} onNext={goNext} onBack={() => setStep('animals')} />}
+        {step === 'memory' && <MemoryStep key="memory" colors={colors} agreed={agreedMemory} setAgreed={setAgreedMemory} onNext={goNext} />}
+        {step === 'notifications' && <NotificationsStep key="notifications" colors={colors} onEnable={async () => { const g = await requestNotificationPermission(); setNotifEnabled(g); goNext(); }} onSkip={() => { setNotifEnabled(false); goNext(); }} />}
+        {step === 'tokens' && <TokensStep key="tokens" colors={colors} onNext={goNext} />}
         {step === 'depth'   && <DepthStep key="depth" colors={colors} depth={depth} setDepth={setDepth} onNext={goNext} />}
         {step === 'legal'   && (
           <LegalStep
@@ -1416,6 +1542,19 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingTop: 60,
     paddingBottom: 40,
+  },
+  tokenOrb: {
+    width: 132,
+    height: 132,
+    borderRadius: 66,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tokenNumber: {
+    fontSize: 58,
+    fontWeight: '300',
+    letterSpacing: -1,
   },
   glyph: {
     fontSize: 44,
