@@ -449,7 +449,7 @@ function DepthStep({ colors, depth, setDepth, onNext }: {
   return (
     <Animated.View entering={FadeIn.duration(400)} style={styles.stepWrap}>
       <View style={styles.stepHeader}>
-        <Text style={[styles.stepLabel, { color: colors.textDim }]}>04 / 06</Text>
+        <Text style={[styles.stepLabel, { color: colors.textDim }]}>to begin</Text>
         <Text style={[styles.stepQuestion, { color: colors.text }]}>
           {'how shall I\nspeak to you?'}
         </Text>
@@ -712,129 +712,215 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
 // Grounded in shadow-work research: projection as the doorway, "heavier before
 // lighter is normal", war → compassion. Deliberately NOT a clinical/crisis screen.
 
-const ATTUNE_QUESTIONS: { q: string; options: string[] }[] = [
-  { q: 'what brings you here, right now?', options: [
-    "something's been quietly off, and I want to understand it",
-    "I'm curious about the parts of me I don't look at",
-    'I keep circling the same feeling and want a way through',
-    'I just want a space that is mine to think',
-  ] },
-  { q: 'when a feeling rises that you can’t name, you tend to—', options: [
-    'sit with it and turn inward',
-    'reason through it until it settles',
-    'stay busy and let it pass',
-    'reach for someone to talk to',
-  ] },
-  { q: 'the trait that irritates you most in others is usually—', options: [
-    'one I quietly carry too',
-    'one I’ve worked hard to bury',
-    'one I secretly wish I had',
-    'one I’ve made peace with',
-  ] },
-  { q: 'lately, when you turn inward, it feels—', options: [
-    'heavier than I expected',
-    'foggy, hard to make out',
-    'restless, like something wants to move',
-    'quieter than it used to be',
-  ] },
-  { q: 'the part of you others rarely see is—', options: [
-    'softer than I let on',
-    'sharper, more certain than I show',
-    'hungrier, more ambitious',
-    'tired, and carrying a lot',
-  ] },
-  { q: 'when something painful surfaces, you—', options: [
-    'pull inward and go quiet',
-    'explain it away',
-    'push through and stay busy',
-    'let it move through me',
-  ] },
-  { q: 'what do you most want from a space like this?', options: [
-    'to be understood without explaining',
-    'honesty, even when it stings',
-    'presence — something simply there',
-    'to be seen as more than I feel right now',
-  ] },
-  { q: 'the parts of yourself you don’t like, you tend to—', options: [
-    'hide them, even from myself',
-    'fight to fix or overcome them',
-    'pretend they are not there',
-    'I’m learning to let them sit with me',
-  ] },
-  { q: 'the story you tell about yourself is—', options: [
-    'still being written',
-    'one I’m ready to question',
-    'heavier than it needs to be',
-    'quieter than the truth',
-  ] },
-  { q: 'if Symponia could meet you in one way, it would be—', options: [
-    'gently — no rush, no pressure',
-    'directly — name what I avoid',
-    'patiently — returning over time',
-    'warmly — less war, more curiosity',
-  ] },
-  { q: 'when someone praises you, you—', options: [
-    'deflect it quickly',
-    'quietly doubt it',
-    'take it in, a little',
-    'replay it later, alone',
-  ] },
-  { q: 'the emotion you find hardest to show is—', options: [
-    'anger',
-    'need',
-    'sadness',
-    'tenderness',
-  ] },
-  { q: 'when you’re alone for a long while, you—', options: [
-    'feel most like yourself',
-    'grow restless',
-    'start to hear what you avoid',
-    'feel the weight of it',
-  ] },
-  { q: 'the version of you that you keep hidden is—', options: [
-    'more vulnerable than I show',
-    'more powerful than I admit',
-    'more selfish than I’d like',
-    'more free than I allow',
-  ] },
-  { q: 'what you look for in others is often—', options: [
-    'what I haven’t given myself',
-    'a mirror for who I am',
-    'someone who needs me',
-    'distance, room to breathe',
-  ] },
-  { q: 'change, for you, usually arrives—', options: [
-    'slowly, then all at once',
-    'only when something breaks',
-    'when I finally stop resisting',
-    'quietly, before I notice',
-  ] },
-];
+type AttuneQ = { q: string; options: string[] };
 
-function AttuneStep({ colors, answers, setAnswers, onNext, onBack, onProgress }: {
-  colors: any; answers: number[]; setAnswers: (v: number[]) => void;
+// Tone-adaptive intake. The question set is chosen by the voice the user picked in
+// the first step, so a "direct & practical" person never meets philosophical framing.
+// Every question is multi-select ("choose all that feel true").
+const ATTUNE_SETS: Record<Frequency, AttuneQ[]> = {
+  // deep & philosophical
+  Intellectual: [
+    { q: 'what brings you here, right now?', options: [
+      "something's quietly off, and I want to understand it",
+      "I'm curious about the parts of me I don't look at",
+      'I keep circling the same feeling and want a way through',
+      'I want a space that is mine to think',
+    ] },
+    { q: 'when a feeling rises that you can’t name, you tend to—', options: [
+      'sit with it and turn inward',
+      'reason through it until it settles',
+      'stay busy and let it pass',
+      'reach for someone to talk to',
+    ] },
+    { q: 'the trait that irritates you most in others is usually—', options: [
+      'one I quietly carry too',
+      "one I've worked hard to bury",
+      'one I secretly wish I had',
+      "one I've made peace with",
+    ] },
+    { q: 'when something painful surfaces, you—', options: [
+      'pull inward and go quiet',
+      'explain it away',
+      'push through and stay busy',
+      'let it move through me',
+    ] },
+    { q: "the parts of yourself you don't like, you tend to—", options: [
+      'hide them, even from myself',
+      'fight to fix or overcome them',
+      'pretend they are not there',
+      'let them sit with me',
+    ] },
+    { q: 'the version of you that you keep hidden is—', options: [
+      'more vulnerable than I show',
+      'more powerful than I admit',
+      "more selfish than I'd like",
+      'more free than I allow',
+    ] },
+    { q: 'what do you most want from a space like this?', options: [
+      'to be understood without explaining',
+      'honesty, even when it stings',
+      'presence — something simply there',
+      'to be seen as more than I feel right now',
+    ] },
+    { q: 'when you are alone for a long while, you—', options: [
+      'feel most like yourself',
+      'grow restless',
+      'start to hear what you avoid',
+      'feel the weight of it',
+    ] },
+    { q: 'change, for you, usually arrives—', options: [
+      'slowly, then all at once',
+      'only when something breaks',
+      'when I finally stop resisting',
+      'quietly, before I notice',
+    ] },
+  ],
+  // warm & plain
+  'Deeply Emotional': [
+    { q: 'what made you open this today?', options: [
+      "I've been feeling a bit off lately",
+      "I want someone to talk to who won't judge",
+      "something's on my mind I can't shake",
+      'I just want a calm space for myself',
+    ] },
+    { q: 'how have you been feeling, mostly?', options: [
+      'tired or worn down',
+      'anxious or on edge',
+      'low or a little sad',
+      "okay, but something's missing",
+    ] },
+    { q: "when something's bothering you, what helps?", options: [
+      'talking it out',
+      'some quiet on my own',
+      'being distracted for a while',
+      'someone just being there',
+    ] },
+    { q: "when you're upset, you usually—", options: [
+      'keep it to yourself',
+      'want to talk right away',
+      'need time before you can say anything',
+      "aren't always sure what you feel",
+    ] },
+    { q: 'what do you wish people understood about you?', options: [
+      'I care more than I show',
+      "I'm doing my best",
+      'I need more support than I ask for',
+      "I'm stronger than I look",
+    ] },
+    { q: 'what is hardest to say out loud?', options: [
+      "that I'm struggling",
+      'that I need help',
+      "that I'm hurt",
+      "that I'm not okay",
+    ] },
+    { q: 'what would feel good to have here?', options: [
+      'someone kind to talk to',
+      'a place to sort out my thoughts',
+      'gentle encouragement',
+      'to feel less alone',
+    ] },
+    { q: 'what has been the hardest part of your days lately?', options: [
+      'getting started in the morning',
+      'being around people',
+      'the quiet moments alone',
+      'winding down at night',
+    ] },
+    { q: 'what would a good day feel like right now?', options: [
+      'calm and unhurried',
+      'connected to someone',
+      'a little lighter',
+      'proud of something small',
+    ] },
+  ],
+  // direct & practical
+  Quiet: [
+    { q: 'why are you here today?', options: [
+      'to understand myself better',
+      'to work through something specific',
+      'to build a habit of reflecting',
+      'just looking around',
+    ] },
+    { q: "what's on your mind most right now?", options: [
+      'work or money',
+      'a relationship',
+      'my mood or health',
+      'the future',
+    ] },
+    { q: 'what do you want out of this?', options: [
+      'clarity',
+      'a plan',
+      'to feel better',
+      'honest feedback',
+    ] },
+    { q: 'how do you like answers?', options: [
+      'short and clear',
+      'straight to the point',
+      'with one thing to try',
+      'no sugar-coating',
+    ] },
+    { q: "when you're stuck, what helps?", options: [
+      'a clear next step',
+      'naming the real problem',
+      'time to think',
+      'talking to someone',
+    ] },
+    { q: 'what gets in your way most?', options: [
+      'overthinking',
+      'putting things off',
+      'stress',
+      'not enough time',
+    ] },
+    { q: 'what would progress look like?', options: [
+      'a decision made',
+      'a habit that sticks',
+      'less stress',
+      'understanding why',
+    ] },
+    { q: 'how often do you want to check in?', options: [
+      'every day',
+      'a few times a week',
+      'now and then',
+      'not sure yet',
+    ] },
+    { q: 'what should Symponia know about you?', options: [
+      'I like things practical',
+      "I don't have much time",
+      'I want honesty',
+      "I'm just getting started",
+    ] },
+  ],
+};
+
+function AttuneStep({ colors, tone, answers, setAnswers, onNext, onBack, onProgress }: {
+  colors: any; tone: Frequency; answers: number[][]; setAnswers: (v: number[][]) => void;
   onNext: () => void; onBack: () => void; onProgress: (f: number) => void;
 }) {
+  const QUESTIONS = ATTUNE_SETS[tone] ?? ATTUNE_SETS.Intellectual;
   const [idx, setIdx] = React.useState(0);
-  const total = ATTUNE_QUESTIONS.length;
+  const total = QUESTIONS.length;
 
-  // Report sub-progress so the global top bar advances through the 16 questions.
+  // Report sub-progress so the global top bar advances through the questions.
   React.useEffect(() => {
     onProgress(total > 1 ? idx / (total - 1) : 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idx]);
-  const q = ATTUNE_QUESTIONS[idx];
-  const selected = answers[idx] ?? -1;
+  }, [idx, total]);
 
-  const choose = (i: number) => {
+  const q = QUESTIONS[idx];
+  const selected = answers[idx] ?? [];
+  const hasAny = selected.length > 0;
+
+  const toggle = (i: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const next = answers.slice();
-    next[idx] = i;
+    const next = answers.map((a) => (a ? a.slice() : []));
+    while (next.length < total) next.push([]);
+    const cur = next[idx];
+    const at = cur.indexOf(i);
+    if (at >= 0) cur.splice(at, 1); else cur.push(i);
     setAnswers(next);
   };
 
   const advance = () => {
-    if (selected < 0) return;
+    if (!hasAny) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (idx < total - 1) setIdx(idx + 1);
     else onNext();
@@ -846,9 +932,11 @@ function AttuneStep({ colors, answers, setAnswers, onNext, onBack, onProgress }:
     else onBack();
   };
 
+  const mid = Math.floor(total / 2);
+
   return (
     <Animated.View key={idx} entering={FadeIn.duration(350)} style={styles.stepWrap}>
-      {idx === 8 && (
+      {idx === mid && (
         <Text style={[styles.stepHint, { color: colors.textSub, textAlign: 'center', marginBottom: 20, lineHeight: 21 }]}>
           you are over halfway. most people find these stir up more than they expected. that is the point. keep going, gently.
         </Text>
@@ -859,13 +947,13 @@ function AttuneStep({ colors, answers, setAnswers, onNext, onBack, onProgress }:
         </Text>
         <Text style={[styles.stepQuestion, { color: colors.text }]}>{q.q}</Text>
         <Text style={[styles.stepHint, { color: colors.textDim }]}>
-          there are no wrong answers — only what feels true
+          choose all that feel true
         </Text>
       </View>
 
       <View style={styles.optionList}>
         {q.options.map((opt, i) => {
-          const active = selected === i;
+          const active = selected.includes(i);
           return (
             <TouchableOpacity
               key={i}
@@ -874,11 +962,11 @@ function AttuneStep({ colors, answers, setAnswers, onNext, onBack, onProgress }:
                 { borderColor: active ? colors.cyanBorder : colors.glassBorder },
                 active && { backgroundColor: colors.cyanDim },
               ]}
-              onPress={() => choose(i)}
+              onPress={() => toggle(i)}
               activeOpacity={0.7}
             >
-              <View style={[styles.radioOuter, { borderColor: active ? colors.cyan : colors.textDim }]}>
-                {active && <View style={[styles.radioInner, { backgroundColor: colors.cyan }]} />}
+              <View style={[styles.checkbox, { borderColor: active ? colors.cyan : colors.textDim }, active && { backgroundColor: colors.cyanDim }]}>
+                {active && <Text style={[styles.checkMark, { color: colors.cyan }]}>✓</Text>}
               </View>
               <Text style={[styles.optionLabel, { color: active ? colors.text : colors.textSub, flex: 1 }]}>
                 {opt}
@@ -892,14 +980,14 @@ function AttuneStep({ colors, answers, setAnswers, onNext, onBack, onProgress }:
         style={[
           styles.primaryBtn,
           {
-            backgroundColor: selected >= 0 ? colors.cyanDim : 'transparent',
-            borderColor: selected >= 0 ? colors.cyanBorder : colors.glassBorder,
+            backgroundColor: hasAny ? colors.cyanDim : 'transparent',
+            borderColor: hasAny ? colors.cyanBorder : colors.glassBorder,
           },
         ]}
         onPress={advance}
-        activeOpacity={selected >= 0 ? 0.75 : 1}
+        activeOpacity={hasAny ? 0.75 : 1}
       >
-        <Text style={[styles.primaryBtnText, { color: selected >= 0 ? colors.cyan : colors.textDim }]}>
+        <Text style={[styles.primaryBtnText, { color: hasAny ? colors.cyan : colors.textDim }]}>
           {idx < total - 1 ? 'continue' : 'begin'}
         </Text>
       </TouchableOpacity>
@@ -993,7 +1081,7 @@ function ArchetypeInfoStep({ colors, isDark, onNext, onBack }: {
 
 // ── Onboarding ────────────────────────────────────────────────────────────────
 
-const STEPS: Step[] = ['welcome', 'attune', 'name', 'gender', 'animals', 'archetype', 'depth', 'legal'];
+const STEPS: Step[] = ['welcome', 'depth', 'attune', 'name', 'gender', 'animals', 'archetype', 'legal'];
 
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
@@ -1012,7 +1100,7 @@ export default function OnboardingScreen() {
   const [agreedMemory, setAgreedMemory] = useState(false);
   const [showAIConsent, setShowAIConsent] = useState(false);
   const [showWeaving, setShowWeaving] = useState(false);
-  const [attune, setAttune] = useState<number[]>([]);
+  const [attune, setAttune] = useState<number[][]>([]);
   const [attuneProgress, setAttuneProgress] = useState(0);
   const [authError, setAuthError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1154,7 +1242,7 @@ export default function OnboardingScreen() {
         showsVerticalScrollIndicator={false}
       >
         {step === 'welcome' && <WelcomeStep key="welcome" colors={colors} onNext={goNext} />}
-        {step === 'attune'  && <AttuneStep key="attune" colors={colors} answers={attune} setAnswers={setAttune} onNext={goNext} onBack={() => setStep('welcome')} onProgress={setAttuneProgress} />}
+        {step === 'attune'  && <AttuneStep key="attune" colors={colors} tone={depth} answers={attune} setAnswers={setAttune} onNext={goNext} onBack={() => setStep('depth')} onProgress={setAttuneProgress} />}
         {step === 'name'    && <NameStep key="name" colors={colors} name={name} setName={setName} onNext={goNext} />}
         {step === 'gender'  && <GenderStep key="gender" colors={colors} gender={gender} setGender={setGender} onNext={goNext} />}
         {step === 'animals' && <AnimalsStep key="animals" colors={colors} animals={animals} setAnimals={setAnimals} cols={animalCols} setCols={setAnimalCols} onNext={goNext} onBack={() => setStep('gender')} />}
