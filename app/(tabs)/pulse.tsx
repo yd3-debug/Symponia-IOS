@@ -697,20 +697,27 @@ export default function ProfiloScreen() {
                       <Text style={[styles.subBtnText, { color: isPurchasingSub ? colors.textDim : colors.cyan }]}>
                         {isPurchasingSub
                           ? t('processing…')
-                          : trialDays
-                            ? t('Start {n} days free', { n: trialDays })
-                            : t(isWeekly ? 'subscribe — {price}/week' : 'subscribe — {price}/month', { price: priceLabel })}
+                          : pricesError
+                            ? t('tap to retry')
+                            : trialDays
+                              ? t('Start {n} days free', { n: trialDays })
+                              : t('Subscribe')}
                       </Text>
                     </TouchableOpacity>
-                    {/* Apple requires the real price and renewal terms next to the
-                        purchase control — the trial headline does not replace them. */}
+                    {/* The button carries no number — but Apple (3.1.2) requires the
+                        real price and renewal terms ADJACENT to the purchase control.
+                        So the price lives here, quietly, and must never be removed:
+                        strip it and the subscription is rejected. */}
                     <Text style={[styles.subRenewalNote, { color: colors.textDim }]}>
                       {trialDays
                         ? t('Then {price} / {period}. Cancel anytime before it ends and you are not charged.', {
                             price: priceForLegalText,
                             period: t(isWeekly ? 'week' : 'month'),
                           })
-                        : t(sub.shortRenewKey)}
+                        : t('{price} / {period} · auto-renews · cancel anytime in App Store Settings', {
+                            price: priceForLegalText,
+                            period: t(isWeekly ? 'week' : 'month'),
+                          })}
                     </Text>
                     {/* Legal links adjacent to purchase button — required by Apple */}
                     <View style={[styles.subLegalInline]}>
@@ -841,8 +848,11 @@ export default function ProfiloScreen() {
                   return (
                     <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 7 }}>
                       <Text style={{ fontSize: 22 }}>{emoji}</Text>
+                      {/* The animal's name is DATA in the database ('wolf'), but a
+                          NAME on screen. Translate the display form only — never the
+                          stored value, or every lookup keyed on it would break. */}
                       <Text style={{ flex: 1, fontSize: 14, fontFamily: FONT, fontWeight: '400', color: colors.text }}>
-                        {animal.charAt(0).toUpperCase() + animal.slice(1).toLowerCase()}
+                        {t(animal.charAt(0).toUpperCase() + animal.slice(1).toLowerCase())}
                       </Text>
                       <Text style={{ fontSize: 11, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.5, color: isShadow ? colors.violet : colors.textDim }}>
                         {ZOO_LABELS[i]}
@@ -1001,7 +1011,7 @@ export default function ProfiloScreen() {
               <Text style={[styles.sectionLabel, { color: colors.textDim }]}>NOTIFICATIONS</Text>
               {(
                 [
-                  { label: 'daily', display: 'daily notification', value: notifDaily, setter: setNotifDaily, scheduler: scheduleDaily },
+                  { label: 'daily', display: t('daily notification'), value: notifDaily, setter: setNotifDaily, scheduler: scheduleDaily },
                 ] as const
               ).map(({ label, display, value, setter, scheduler }) => (
                 <View key={label} style={[styles.rowBetween, styles.notifRow]}>

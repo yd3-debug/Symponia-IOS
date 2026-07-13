@@ -1,5 +1,7 @@
 import { useTheme } from '@/constants/ThemeContext';
-import { ANIMAL_ARCHETYPES, emojiForAnimal } from '@/constants/systemPrompt';
+import { t } from '@/constants/i18n';
+import { emojiForAnimal } from '@/constants/systemPrompt';
+import { useLocalizedArchetype } from '@/services/archetype';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
@@ -30,7 +32,9 @@ export default function ArchetypeScreen() {
 
   const dominant = animals[0];
   const shadow = animals[6];
-  const arc = dominant ? ANIMAL_ARCHETYPES[dominant.toLowerCase().trim()] : undefined;
+  // English on the first frame, the user's language a moment later. The panels
+  // never wait on the network and never show a spinner where prose should be.
+  const arc = useLocalizedArchetype(dominant);
 
   const openChat = (mode: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -58,7 +62,9 @@ export default function ArchetypeScreen() {
             <>
               <View style={styles.domWrap}>
                 <Text style={styles.domEmoji}>{emojiForAnimal(dominant)}</Text>
-                <Text style={[styles.domName, { color: colors.cyan }]}>{dominant.toUpperCase()}</Text>
+                <Text style={[styles.domName, { color: colors.cyan }]}>
+                  {t(dominant.charAt(0).toUpperCase() + dominant.slice(1).toLowerCase()).toUpperCase()}
+                </Text>
                 <Text style={[styles.domSub, { color: colors.textDim }]}>your dominant archetype</Text>
               </View>
 
@@ -108,7 +114,9 @@ export default function ArchetypeScreen() {
                   style={[styles.cta, { borderColor: colors.violet + '66', backgroundColor: colors.violetDim }]}
                 >
                   <Text style={[styles.ctaText, { color: colors.violet }]}>
-                    {`work with your shadow${shadow ? ` · ${cap(shadow)}` : ''}  →`}
+                    {shadow
+                      ? t('work with your shadow · {animal}  →', { animal: t(cap(shadow)) })
+                      : t('work with your shadow  →')}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity

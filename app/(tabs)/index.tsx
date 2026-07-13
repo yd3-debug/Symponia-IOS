@@ -4,7 +4,9 @@ import { topUpDailyReflections } from '@/services/notifications';
 import { checkSubscription, syncTokens } from '@/services/supabaseTokens';
 import { MoodCheckIn } from '@/components/MoodCheckIn';
 import { hasCheckedInToday, saveMood } from '@/services/mood';
-import { ANIMAL_ARCHETYPES, emojiForAnimal } from '@/constants/systemPrompt';
+import { emojiForAnimal } from '@/constants/systemPrompt';
+import { useLocalizedArchetype } from '@/services/archetype';
+import { t } from '@/constants/i18n';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect } from 'expo-router';
@@ -372,10 +374,21 @@ export default function OracoloScreen() {
   const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '');
   const dominant = animals[0];
   const shadow = animals[6];
-  const domArc = dominant ? ANIMAL_ARCHETYPES[dominant.toLowerCase().trim()] : undefined;
+  // The living line is a fragment of the dominant animal's shadow reading — prose,
+  // not UI copy, so it comes from the localiser rather than the dictionaries.
+  // English until it resolves, which is exactly what it was before.
+  const domArc = useLocalizedArchetype(dominant);
+  // Template literals cannot be translated — the assembled sentence never exists
+  // as a literal, so it has no dictionary key and always fell back to English.
+  // Each fragment (including the animal's name) is translated on its own.
   const archetypeSubtitle = dominant
-    ? `${cap(dominant)}, dominant${shadow ? ` · ${cap(shadow)}, your shadow` : ''}`
-    : 'Seven animals that reveal who you are.';
+    ? shadow
+      ? t('{animal}, dominant · {shadowAnimal}, your shadow', {
+          animal: t(cap(dominant)),
+          shadowAnimal: t(cap(shadow)),
+        })
+      : t('{animal}, dominant', { animal: t(cap(dominant)) })
+    : t('Seven animals that reveal who you are.');
   const livingLine = domArc
     ? `"${(domArc.shadow.split(';')[1] || domArc.shadow.split(';')[0]).trim().toLowerCase().replace(/\.$/, '')}."`
     : '';
@@ -490,7 +503,12 @@ export default function OracoloScreen() {
             >
               <Text style={[styles.continueIcon, { color: colors.cyan }]}>↩</Text>
               <Text style={[styles.continueText, { color: colors.textSub }]} numberOfLines={1}>
-                {`continue your last reflection · ${lastModeMeta.title.toLowerCase()}`}
+                {/* Was a template literal, which is why it stayed English: the
+                    finished string never exists in the source, so it has no key.
+                    Both halves must be translated separately, then joined. */}
+                {t('continue your last reflection · {mode}', {
+                  mode: t(lastModeMeta.title).toLowerCase(),
+                })}
               </Text>
               <Text style={[styles.cardChevron, { color: colors.textDim, fontSize: 18 }]}>›</Text>
             </TouchableOpacity>
@@ -512,6 +530,25 @@ export default function OracoloScreen() {
 
       {/* First-time tooltip walkthrough */}
       {showWalkthrough && <WalkthroughOverlay onDone={dismissWalkthrough} measurements={measurements} />}
+
+      {/* The mood check-in. Every piece of this existed — the state above, the
+          'after' flag queued by the chat screen, the component, the table — and
+          none of it ever appeared, because this line was missing.
+
+          Dismissing without answering (score === null) is always allowed: a
+          prompt that cannot be declined is a demand, not a question. Either way
+          the 'after' debt is cleared, so it can never ask twice. */}
+      {mood && (
+        <MoodCheckIn
+          phase={mood}
+          onDone={(score) => {
+            const phase = mood;
+            setMood(null);
+            AsyncStorage.removeItem('symponia_mood_after_due').catch(() => {});
+            if (score !== null) saveMood(score, phase).catch(() => {});
+          }}
+        />
+      )}
     </View>
   );
 }

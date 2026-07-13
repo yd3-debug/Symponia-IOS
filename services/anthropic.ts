@@ -12,9 +12,11 @@ export interface Message {
   content: string;
 }
 
-const ORACLE_URL = `${SUPABASE_URL}/functions/v1/oracle`;
+export const ORACLE_URL = `${SUPABASE_URL}/functions/v1/oracle`;
 
-async function getValidToken(): Promise<string | null> {
+// Exported so the archetype localiser can take exactly this auth path — the same
+// refresh-if-stale logic, not a second copy that drifts out of step with it.
+export async function getValidToken(): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession();
   
   if (!session) return null;

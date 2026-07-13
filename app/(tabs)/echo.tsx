@@ -2,6 +2,7 @@ import { useTheme } from '@/constants/ThemeContext';
 import { TRIAL_TOKENS } from '@/constants/config';
 import { ANIMAL_ARCHETYPES, MODE_GREETINGS, buildAnimalGreeting, extractSemanticTags } from '@/constants/systemPrompt';
 import { FairUseError, TrialExhaustedError, localizeOpening, streamAnimalSynthesis, streamArchetype, streamChat, type Message } from '@/services/anthropic';
+import { useLocalizedArchetypes } from '@/services/archetype';
 import { loadConversation, saveConversation, clearConversation } from '@/services/conversations';
 import { checkSubscription, deductToken, syncTokens } from '@/services/supabaseTokens';
 import {
@@ -130,6 +131,8 @@ const MODE_LABELS: Record<string, string> = {
   shadow:    'SYMPONIA · SHADOW',
 };
 
+const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '');
+
 // Gently-framed opening for a shadow session, seeded with the user's shadow animal.
 // Grounded in shadow-work guidance: name it with compassion, offer a soft (projection)
 // way in, and make clear this is a paced space — not therapy.
@@ -137,9 +140,12 @@ function buildShadowGreeting(animals: string[]): string {
   const shadow = animals[6] || animals[animals.length - 1] || '';
   const key = shadow.toLowerCase().trim();
   const arc = ANIMAL_ARCHETYPES[key];
-  const name = shadow ? shadow.charAt(0).toUpperCase() + shadow.slice(1).toLowerCase() : 'your shadow';
-  const moves = arc ? arc.shadow.split(';')[0].trim().toLowerCase() : 'something you keep just out of sight';
-  return `Your shadow is the ${name}. It often moves as ${moves}. We don't need to fix it — let's just meet it, gently, a little at a time. This isn't therapy; go at your own pace.\n\nWhere would you like to begin? You might start with when you feel this most — or who in your life seems to trigger it.`;
+  const name = shadow ? t(cap(shadow)) : t('your shadow');
+  const moves = arc ? arc.shadow.split(';')[0].trim().toLowerCase() : t('something you keep just out of sight');
+  return t(
+    "Your shadow is the {name}. It often moves as {moves}. We don't need to fix it — let's just meet it, gently, a little at a time. This isn't therapy; go at your own pace.\n\nWhere would you like to begin? You might start with when you feel this most — or who in your life seems to trigger it.",
+    { name, moves },
+  );
 }
 
 // ── Word (long-pressable) ─────────────────────────────────────────────────────
@@ -309,6 +315,9 @@ function AnimalReadingView({ animals, onAskMore, onWordLongPress }: { animals: s
   const { colors } = useTheme();
   const [synthesis, setSynthesis] = useState('');
   const [synthLoading, setSynthLoading] = useState(true);
+  // gift/shadow/path is prose, not dictionary copy: it comes back composed in the
+  // user's language. English renders immediately; the swap is silent and cached.
+  const prose = useLocalizedArchetypes(animals);
 
   useEffect(() => {
     const abort = streamAnimalSynthesis(
@@ -341,7 +350,7 @@ function AnimalReadingView({ animals, onAskMore, onWordLongPress }: { animals: s
       {/* Individual animal cards */}
       {animals.map((animal, i) => {
         const key = animal.toLowerCase().trim();
-        const arc = ANIMAL_ARCHETYPES[key];
+        const arc = prose[key];
         const isShadow = i === 6;
         const accent = isShadow ? colors.violet : colors.cyan;
         const accentDim = isShadow ? colors.violetDim : colors.cyanDim;
@@ -368,9 +377,9 @@ function AnimalReadingView({ animals, onAskMore, onWordLongPress }: { animals: s
             {arc && (
               <View style={styles.animalCardLayers}>
                 {([
-                  { label: '◆ GIFT',   text: arc.gift,   color: accent,        prompt: `Go deeper into my ${animal} gift — "${arc.gift.slice(0, 60)}..."` },
-                  { label: '◆ SHADOW', text: arc.shadow, color: colors.red,    prompt: `I want to explore my ${animal} shadow more — "${arc.shadow.slice(0, 60)}..."` },
-                  { label: '⚡ ACTION', text: arc.path,   color: colors.green,  prompt: `Help me work with the ${animal} path — "${arc.path.slice(0, 60)}..."` },
+                  { label: '◆ GIFT',   text: arc.gift,   color: accent,        prompt: t('Go deeper into my {animal} gift — "{quote}..."',        { animal: t(cap(animal)), quote: arc.gift.slice(0, 60) }) },
+                  { label: '◆ SHADOW', text: arc.shadow, color: colors.red,    prompt: t('I want to explore my {animal} shadow more — "{quote}..."', { animal: t(cap(animal)), quote: arc.shadow.slice(0, 60) }) },
+                  { label: '⚡ ACTION', text: arc.path,   color: colors.green,  prompt: t('Help me work with the {animal} path — "{quote}..."',      { animal: t(cap(animal)), quote: arc.path.slice(0, 60) }) },
                 ] as const).map(({ label, text, color, prompt }) => (
                   <View key={label} style={[styles.animalCardLayer, { borderLeftColor: color }]}>
                     <Text style={[styles.animalCardLayerLabel, { color: colors.textDim }]}>{label}</Text>

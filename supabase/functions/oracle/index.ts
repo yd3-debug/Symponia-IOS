@@ -66,6 +66,24 @@ const FAIR_USE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const FAIR_USE_BURST_MAX = 60;
 const FAIR_USE_BURST_MS = 5 * 60 * 60 * 1000;
 
+// ── Localisation limiter ────────────────────────────────────────────────────
+// Two modes ('opening' and 'archetype-prose') exist only to say the app's OWN
+// copy in the user's language. Neither deducts a token, so both need a floor.
+// They share one table (rate_limit_opening) and therefore must share one
+// budget — if they didn't, the archetype calls would silently eat the opening
+// allowance and a German user's greeting would quietly fall back to English.
+//
+// Sizing, for the heaviest honest user: 1 opening + 7 archetype readings (one
+// per animal) = 8. Switching language, or reshaping their animals, buys another
+// 8. 40 in a rolling 30 days covers that several times over, and every result is
+// cached on-device forever, so a settled user makes zero calls from then on.
+//
+// Abuse ceiling: 40 calls, worst case all on the Sonnet opening path (~3.7c),
+// is ~$1.48/month for someone holding a real authenticated session. The
+// archetype path is Haiku and rounds to nothing.
+const LOCALIZE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const LOCALIZE_WINDOW_MAX = 40;
+
 Deno.serve(async (req: Request) => {
   // Preflight
   if (req.method === 'OPTIONS') {
@@ -356,14 +374,15 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Rate limit: 10 per user per rolling 30 DAYS — not per day.
+    // Rate limit: the shared localisation budget (see LOCALIZE_WINDOW_MAX) — a
+    // rolling 30 DAYS, not per day.
     //
     // This path deducts no token, and at ~3.7c a call a 20/day limit exposed
     // ~$22/user/month of free inference to anyone holding a session. A real user
     // hits this once or twice ever: the result is cached on-device per language +
     // animal set, so it only regenerates if they switch language or redo their
-    // animals. 10 per month is generous for that and caps abuse at ~$0.37.
-    const openWindow = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    // animals.
+    const openWindow = new Date(Date.now() - LOCALIZE_WINDOW_MS).toISOString();
     const { count: openCount, error: openCountErr } = await admin
       .from('rate_limit_opening')
       .select('*', { count: 'exact', head: true })
@@ -374,7 +393,7 @@ Deno.serve(async (req: Request) => {
       console.error('Opening rate limit check failed:', openCountErr);
       return jsonError('Rate limit check failed', 'INTERNAL_ERROR', 500);
     }
-    if ((openCount ?? 0) >= 10) {
+    if ((openCount ?? 0) >= LOCALIZE_WINDOW_MAX) {
       return jsonError('Rate limit exceeded', 'RATE_LIMITED', 429);
     }
 
@@ -445,6 +464,147 @@ Deno.serve(async (req: Request) => {
       status: 200,
       headers: JSON_HEADERS,
     });
+  }
+
+  // ── Archetype prose fast path ─────────────────────────────────────────────
+  // ANIMAL_ARCHETYPES — the gift / shadow / path reading for each of the ~39
+  // animals — is English literary data, not UI copy. It is deliberately NOT in
+  // the i18n dictionaries: 117 aphorisms × 8 languages is not something you
+  // hand-translate, and a word-for-word machine translation would flatten
+  // exactly the compression that makes them land.
+  //
+  // So the client sends the English reading it already holds, and Claude COMPOSES
+  // the same three readings natively in the user's language. Cheap model (this is
+  // three short lines of structured text), no token deducted, and the client
+  // caches per language + animal — so this fires once per animal, ever.
+  //
+  // FAIL-SAFE BY CONSTRUCTION: every path that isn't a clean, parsed, non-empty
+  // result returns the ENGLISH originals with a 200. The client must never see an
+  // error here, because the fallback is not "broken" — it is today's behaviour.
+  if (body.mode === 'archetype-prose') {
+    const clamp = (v: unknown) => (typeof v === 'string' ? v.trim().slice(0, 1000) : '');
+    const animal = clamp(body.animal).slice(0, 60);
+    const gift = clamp(body.gift);
+    const shadow = clamp(body.shadow);
+    const path = clamp(body.path);
+
+    // Nothing to compose from — this is a malformed client, not a language issue.
+    if (!animal || !gift || !shadow || !path) {
+      return jsonError('Missing archetype fields', 'BAD_REQUEST', 400);
+    }
+
+    // The English source IS the answer for English. No model call, no row.
+    const english = { gift, shadow, path };
+    if (langCode === 'en') {
+      return new Response(JSON.stringify(english), { status: 200, headers: JSON_HEADERS });
+    }
+
+    const { count: arcCount, error: arcCountErr } = await admin
+      .from('rate_limit_opening')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', new Date(Date.now() - LOCALIZE_WINDOW_MS).toISOString());
+
+    // Over budget, or the limiter itself is unhappy: fall back to English. This
+    // is copy, not a reflection — degrading quietly beats failing loudly.
+    if (arcCountErr || (arcCount ?? 0) >= LOCALIZE_WINDOW_MAX) {
+      if (arcCountErr) console.error('Archetype rate limit check failed:', arcCountErr);
+      return new Response(JSON.stringify(english), { status: 200, headers: JSON_HEADERS });
+    }
+
+    const arcBody = {
+      // Haiku on purpose. Three short aphorisms — Sonnet buys nothing here and
+      // this is the same model the long-press archetype path already uses.
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 700,
+      system:
+        `You are Symponia. Below are three Jungian archetype readings for the ${animal} — ` +
+        `its GIFT (what the archetype gives), its SHADOW (how it distorts under pressure), ` +
+        `and its PATH (the work that integrates it) — written in English.\n\n` +
+        `Write those same three readings in ${langName}.\n\n` +
+        `This is NOT a word-for-word translation. Compose them as a native ${langName} writer ` +
+        `would: same meaning, same compressed aphoristic register, roughly the same length, ` +
+        `the same quiet and unclinical voice. Keep the internal punctuation rhythm (semicolons, ` +
+        `em dashes) where the language allows it. Render the animal's name in ${langName} if you ` +
+        `need to name it. Do not soften, explain, expand or add a moral.\n\n` +
+        `Return STRICT JSON and nothing else — no preamble, no code fence, no commentary:\n` +
+        `{"gift": "...", "shadow": "...", "path": "..."}`,
+      messages: [{
+        role: 'user',
+        content: JSON.stringify({ animal, gift, shadow, path }),
+      }],
+    };
+
+    let arcJson: any;
+    try {
+      const arcRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(arcBody),
+      });
+      if (!arcRes.ok) {
+        console.error('Anthropic error for archetype-prose:', await arcRes.text());
+        return new Response(JSON.stringify(english), { status: 200, headers: JSON_HEADERS });
+      }
+      arcJson = await arcRes.json();
+    } catch (e) {
+      console.error('Archetype-prose upstream failed:', e);
+      return new Response(JSON.stringify(english), { status: 200, headers: JSON_HEADERS });
+    }
+
+    // Defensive parse. A model that fences its JSON, or prefaces it, or returns
+    // prose, must cost us nothing but a fallback to English.
+    let out: { gift: string; shadow: string; path: string } | null = null;
+    try {
+      const raw: string = (arcJson?.content?.[0]?.text ?? '').trim();
+      const start = raw.indexOf('{');
+      const end = raw.lastIndexOf('}');
+      if (start !== -1 && end > start) {
+        const parsed = JSON.parse(raw.slice(start, end + 1));
+        const g = typeof parsed?.gift === 'string' ? parsed.gift.trim() : '';
+        const s = typeof parsed?.shadow === 'string' ? parsed.shadow.trim() : '';
+        const p = typeof parsed?.path === 'string' ? parsed.path.trim() : '';
+        if (g && s && p) out = { gift: g, shadow: s, path: p };
+      }
+    } catch (e) {
+      console.error('Archetype-prose parse failed:', e);
+    }
+
+    if (!out) {
+      return new Response(JSON.stringify(english), { status: 200, headers: JSON_HEADERS });
+    }
+
+    // Only a call that actually produced usable prose is charged to the budget.
+    admin
+      .from('rate_limit_opening')
+      .insert({ user_id: user.id })
+      .then(({ error }: { error: any }) => {
+        if (error) console.error('Archetype rate limit insert failed:', error);
+      });
+
+    (async () => {
+      try {
+        const usage = arcJson?.usage;
+        if (usage) {
+          await admin.from('api_usage').insert({
+            user_id: user.id,
+            model: arcJson.model ?? arcBody.model,
+            input_tokens: usage.input_tokens ?? 0,
+            output_tokens: usage.output_tokens ?? 0,
+            cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
+            cache_read_input_tokens: usage.cache_read_input_tokens ?? 0,
+          });
+        }
+      } catch (e) {
+        console.error('Usage log failed:', e);
+      }
+    })();
+
+    return new Response(JSON.stringify(out), { status: 200, headers: JSON_HEADERS });
   }
 
   // ── Profile ───────────────────────────────────────────────────────────────

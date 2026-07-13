@@ -1165,7 +1165,7 @@ function TokensStep({ colors, onNext }: { colors: any; onNext: () => void }) {
           {'reflections,\nto begin with'}
         </Text>
         <Text style={[styles.welcomeBody, { color: colors.textDim, textAlign: 'center' }]}>
-          {`you start with ${TRIAL_TOKENS} free reflections. take your time with\nthem — nothing is charged now, and nothing renews on its own.`}
+          {t('you start with {n} free reflections. take your time with\nthem — nothing is charged now, and nothing renews on its own.', { n: TRIAL_TOKENS })}
         </Text>
         <Text style={[styles.stepHint, { color: colors.textSub, textAlign: 'center', marginTop: 14, lineHeight: 20 }]}>
           {'if they run out and you want to keep going,\nyou choose to add more — never automatically.'}
