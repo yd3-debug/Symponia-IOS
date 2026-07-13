@@ -27,9 +27,15 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const SUBSCRIPTION_SESSIONS_PER_RENEWAL = 350;
-
-const SUBSCRIPTION_PRODUCT_IDS = new Set(['com.symponia.premium.monthly']);
+// Renewals grant no quota — a subscription is access until a date, and usage is
+// governed by the fair-use window in the oracle.
+//
+// A product missing from this set has its renewals ignored entirely — the user
+// keeps paying Apple while their access quietly lapses — so every live
+// subscription id MUST appear here.
+const SUBSCRIPTION_PRODUCT_IDS = new Set([
+  'com.symponia.premium.monthly',
+]);
 
 // Defensive: include tokens500 even though it was never surfaced in the UI —
 // handles any edge-case purchase that may exist in the wild.
@@ -202,12 +208,13 @@ Deno.serve(async (req: Request) => {
 
       const updateData: Record<string, unknown> = {
         ...(expiresAt ? { subscription_expires_at: expiresAt } : {}),
+        ...(productId ? { subscription_product_id: productId } : {}),
       };
 
       if (isNewBillingPeriod) {
-        updateData.tokens = SUBSCRIPTION_SESSIONS_PER_RENEWAL;
+        // No quota granted — renewal simply extends access.
         updateData.tokens_reset_at = new Date().toISOString();
-        console.log(`[apple-notification] DID_RENEW new period → reset to ${SUBSCRIPTION_SESSIONS_PER_RENEWAL} tokens for user ${userId}`);
+        console.log(`[apple-notification] DID_RENEW → ${productId} access extended to ${expiresAt} for user ${userId}`);
       } else {
         console.log(`[apple-notification] DID_RENEW replay → skipping token reset for user ${userId}`);
       }

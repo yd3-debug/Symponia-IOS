@@ -1,7 +1,9 @@
 import { useTheme } from '@/constants/ThemeContext';
 import * as Notifications from 'expo-notifications';
 import { topUpDailyReflections } from '@/services/notifications';
-import { syncTokens } from '@/services/supabaseTokens';
+import { checkSubscription, syncTokens } from '@/services/supabaseTokens';
+import { MoodCheckIn } from '@/components/MoodCheckIn';
+import { hasCheckedInToday, saveMood } from '@/services/mood';
 import { ANIMAL_ARCHETYPES, emojiForAnimal } from '@/constants/systemPrompt';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
@@ -12,10 +14,10 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Text } from '@/components/Text';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -263,6 +265,11 @@ export default function OracoloScreen() {
   const [measurements, setMeasurements] = useState<Measurements>({ header: null, daily: null, modes: null });
   const [name, setName] = useState('');
   const [tokens, setTokens] = useState<number | null>(null);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  // Mood check-in. 'before' fires once a day on opening; 'after' is queued by the
+  // chat screen when a real conversation ends, and collected here so it never
+  // interrupts someone mid-thought.
+  const [mood, setMood] = useState<'before' | 'after' | null>(null);
   const [lastMode, setLastMode] = useState<string | null>(null);
   const [animals, setAnimals] = useState<string[]>([]);
 
@@ -293,6 +300,15 @@ export default function OracoloScreen() {
       if (a) { try { setAnimals(JSON.parse(a)); } catch {} }
     });
     syncTokens().then(setTokens).catch(() => {});
+    checkSubscription().then(setIsSubscribed).catch(() => {});
+
+    (async () => {
+      // An 'after' that's owed always wins — it belongs to a session that just
+      // happened, and asking "how are you arriving?" straight after would be absurd.
+      const due = await AsyncStorage.getItem('symponia_mood_after_due');
+      if (due) { setMood('after'); return; }
+      if (!(await hasCheckedInToday())) setMood('before');
+    })();
   }, []));
 
   useFocusEffect(useCallback(() => {
@@ -379,7 +395,10 @@ export default function OracoloScreen() {
             <Text style={[styles.greetName, { color: colors.text }]}>{name.trim() || 'welcome'}</Text>
             <Text style={[styles.greetSub, { color: colors.textDim }]}>a quiet moment is yours.</Text>
           </View>
-          {tokens !== null && (
+          {/* Trial only. A subscriber has no balance, so this pill would have
+              shown them a stale, meaningless number in the corner of the home
+              screen every time they opened the app. */}
+          {tokens !== null && !isSubscribed && (
             <TouchableOpacity
               onPress={() => router.navigate('/(tabs)/pulse')}
               activeOpacity={0.7}

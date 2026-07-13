@@ -10,11 +10,12 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Text } from '@/components/Text';
+import { t } from '@/constants/i18n';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -194,7 +195,7 @@ export default function ResetPasswordScreen() {
                   style={[styles.inputInner, { color: colors.text }]}
                   value={password}
                   onChangeText={setPassword}
-                  placeholder="new password"
+                  placeholder={t("new password")}
                   placeholderTextColor={colors.textDim}
                   secureTextEntry={!showPw}
                   autoCapitalize="none"
@@ -211,7 +212,7 @@ export default function ResetPasswordScreen() {
                 style={[styles.input, { color: colors.text, borderColor: colors.glassBorder, backgroundColor: inputBg }]}
                 value={confirm}
                 onChangeText={setConfirm}
-                placeholder="confirm password"
+                placeholder={t("confirm password")}
                 placeholderTextColor={colors.textDim}
                 secureTextEntry={!showPw}
                 autoCapitalize="none"

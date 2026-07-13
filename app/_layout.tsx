@@ -3,6 +3,7 @@ import { ThemeProvider, useTheme } from '@/constants/ThemeContext';
 import '@/services/notifications'; // initialise setNotificationHandler at app start
 import { topUpDailyReflections } from '@/services/notifications';
 import { supabase } from '@/services/supabase';
+import { loadLanguage, syncLanguageFromProfile } from '@/services/language';
 import { checkSubscription, syncTokens } from '@/services/supabaseTokens';
 import { TRIAL_TOKENS } from '@/constants/config';
 import { initIAPGlobal, cleanupIAP, verifyAndFinishPurchase, type ProductPurchase } from '@/services/iap';
@@ -262,6 +263,8 @@ function AppShell() {
     };
 
     const init = async () => {
+      // Restore the chosen language before any UI renders.
+      await loadLanguage();
       // 1. Check initial URL first — handles app opened via password reset email
       const initialUrl = await Linking.getInitialURL();
       if (initialUrl) {
@@ -280,6 +283,7 @@ function AppShell() {
       } else {
         AsyncStorage.setItem('symponia_user_id', session.user.id);
         await ensureProfileRow(session.user);
+        syncLanguageFromProfile().catch(() => {});
         await syncProfile(session.user.id);
         syncTokens().catch(() => {});
         startIAP();

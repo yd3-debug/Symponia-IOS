@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { generateDailyReflection, RateLimitError } from './anthropic';
+import { t } from '@/constants/i18n';
 
 // ── Handler (must be set before scheduling) ───────────────────────────────────
 
@@ -151,7 +152,7 @@ export async function scheduleWeekly(enabled: boolean): Promise<void> {
   const weekNumber = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000));
   await Notifications.scheduleNotificationAsync({
     identifier: 'symponia-weekly',
-    content: { title: 'Symponia', body: WEEKLY[weekNumber % WEEKLY.length], sound: false },
+    content: { title: 'Symponia', body: t(WEEKLY[weekNumber % WEEKLY.length]), sound: false },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
       weekday: 2, // Monday (1 = Sunday)
@@ -166,7 +167,7 @@ export async function scheduleMonthly(enabled: boolean): Promise<void> {
   if (!enabled) return;
   await Notifications.scheduleNotificationAsync({
     identifier: 'symponia-monthly',
-    content: { title: 'Symponia', body: MONTHLY[new Date().getMonth() % MONTHLY.length], sound: false },
+    content: { title: 'Symponia', body: t(MONTHLY[new Date().getMonth() % MONTHLY.length]), sound: false },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
       repeats: true,

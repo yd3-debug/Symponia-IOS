@@ -1,7 +1,7 @@
 import { useTheme } from '@/constants/ThemeContext';
 import { TRIAL_TOKENS } from '@/constants/config';
 import { ANIMAL_ARCHETYPES, MODE_GREETINGS, buildAnimalGreeting, extractSemanticTags } from '@/constants/systemPrompt';
-import { streamAnimalSynthesis, streamArchetype, streamChat, type Message } from '@/services/anthropic';
+import { FairUseError, TrialExhaustedError, localizeOpening, streamAnimalSynthesis, streamArchetype, streamChat, type Message } from '@/services/anthropic';
 import { loadConversation, saveConversation, clearConversation } from '@/services/conversations';
 import { checkSubscription, deductToken, syncTokens } from '@/services/supabaseTokens';
 import {
@@ -24,12 +24,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import { Text } from '@/components/Text';
+import { t, getLocale } from '@/constants/i18n';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -162,7 +163,7 @@ function Word({
       onLongPress={() => { if (clean.length > 2) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onLongPress(clean); } }}
       delayLongPress={420}
     >
-      <Text style={[styles.wordText, { color: isUser ? userTextColor : textColor }]}>{word} </Text>
+      <Text raw style={[styles.wordText, { color: isUser ? userTextColor : textColor }]}>{word} </Text>
     </Pressable>
   );
 }
@@ -285,13 +286,13 @@ function ArchetypeSheet({ word, text, isLoading, onClose }: { word: string; text
           <View style={[styles.sheetBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
           <View style={[styles.sheetHandle, { backgroundColor: colors.glassBorderStrong }]} />
           <View style={styles.sheetHeader}>
-            <Text style={[styles.sheetWord, { color: colors.cyan }]}>{word.toUpperCase()}</Text>
+            <Text raw style={[styles.sheetWord, { color: colors.cyan }]}>{word.toUpperCase()}</Text>
             <TouchableOpacity onPress={animatedClose} hitSlop={12}>
               <Text style={[styles.sheetCloseText, { color: colors.textDim }]}>close</Text>
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
-            <Text style={[styles.sheetText, { color: colors.text }]}>
+            <Text raw style={[styles.sheetText, { color: colors.text }]}>
               {text}{isLoading && text.length > 0 ? '▋' : ''}
             </Text>
             {isLoading && text.length === 0 && <BreathingDots dotColor={colors.cyan} />}
@@ -317,9 +318,9 @@ function AnimalReadingView({ animals, onAskMore, onWordLongPress }: { animals: s
       (_err) => {
         setSynthLoading(false);
         Alert.alert(
-          'AI consent required',
-          'You have not granted permission for AI processing. Enable it in Profile → Data & Account.',
-          [{ text: 'OK' }],
+          t('AI consent required'),
+          t('You have not granted permission for AI processing. Enable it in Profile → Data & Account.'),
+          [{ text: t('OK') }],
         );
       },
     );
@@ -374,7 +375,7 @@ function AnimalReadingView({ animals, onAskMore, onWordLongPress }: { animals: s
                   <View key={label} style={[styles.animalCardLayer, { borderLeftColor: color }]}>
                     <Text style={[styles.animalCardLayerLabel, { color: colors.textDim }]}>{label}</Text>
                     <View style={styles.wordFlow}>
-                      {text.split(' ').map((w, wi) => (
+                      {t(text).split(' ').map((w, wi) => (
                         <Word key={wi} word={w} isUser={false} onLongPress={onWordLongPress} textColor={colors.text} userTextColor={colors.text} />
                       ))}
                     </View>
@@ -464,7 +465,10 @@ export default function DialogoScreen() {
   const [tokens, setTokens] = useState(TRIAL_TOKENS);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [subscriptionExpiry, setSubscriptionExpiry] = useState<string | null>(null);
-  const [showSubscriberEmpty, setShowSubscriberEmpty] = useState(false);
+  // Fair use reached (subscriber). Null = not reached. Replaces the old
+  // showSubscriberEmpty flag, which was declared but never set — the
+  // 'you ran out' overlay could never actually appear.
+  const [fairUse, setFairUse] = useState<{ kind: 'week' | 'burst'; resetAt: string | null } | null>(null);
   const [aiConsentRevoked, setAiConsentRevoked] = useState(false);
   const [userAnimals, setUserAnimals] = useState<string[]>([]);
   const [localAnimals, setLocalAnimals] = useState<string[]>([]);
@@ -584,9 +588,17 @@ export default function DialogoScreen() {
           }
           // No history — show opening greeting
           let greeting = '';
+          // Client-composed openings are OUR copy, written in English, and they
+          // render with <Text raw> so the dictionaries can't reach them. Those
+          // need localising. The daily reflection is different: Claude already
+          // wrote it in the user's language, so it must pass through untouched.
+          let clientComposed = true;
           if (mode === 'daily') {
             const reflection = await getTodaysReflectionFromNotifications();
-            if (reflection) greeting = reflection;
+            if (reflection) {
+              greeting = reflection;
+              clientComposed = false;
+            }
           } else if (mode === 'animal' && animalsRaw) {
             const animals: string[] = JSON.parse(animalsRaw);
             greeting = animals.length > 0 ? buildAnimalGreeting(animals) : (MODE_GREETINGS[mode] ?? '');
@@ -595,6 +607,11 @@ export default function DialogoScreen() {
             greeting = animals.length >= 7 ? buildShadowGreeting(animals) : (MODE_GREETINGS[mode] ?? '');
           } else {
             greeting = MODE_GREETINGS[mode] ?? '';
+          }
+          // No-op for English (returns immediately, no network); returns the
+          // English source unchanged on any failure.
+          if (greeting && clientComposed) {
+            greeting = await localizeOpening(greeting);
           }
           setMessages(greeting ? [{ id: 'oracle-0', role: 'assistant', text: greeting }] : []);
           setIsLoadingMode(false);
@@ -641,19 +658,20 @@ export default function DialogoScreen() {
     const consent = await AsyncStorage.getItem('symponia_ai_consent');
     if (consent !== 'true') {
       Alert.alert(
-        'AI consent required',
-        'You have not granted permission for AI processing. Enable it in Profile → Data & Account.',
-        [{ text: 'OK' }],
+        t('AI consent required'),
+        t('You have not granted permission for AI processing. Enable it in Profile → Data & Account.'),
+        [{ text: t('OK') }],
       );
       return;
     }
 
-    if (tokens <= 0) {
-      if (isSubscribed) {
-        setShowSubscriberEmpty(true);
-      } else {
-        router.push('/paywall' as any);
-      }
+    // Subscribers are never gated here — they have no balance to run out of.
+    // The only limit they can meet is fair use, and that is decided by the
+    // SERVER (which is the only thing that can count a rolling window), surfaced
+    // as FairUseError in the onError handler below. Trial users still hit a real
+    // wall, and that one is an honest paywall.
+    if (!isSubscribed && tokens <= 0) {
+      router.push('/paywall' as any);
       return;
     }
 
@@ -733,6 +751,11 @@ export default function DialogoScreen() {
         const existing = await AsyncStorage.getItem('symponia_echo_nodes');
         const parsed: EchoNodeData[] = existing ? JSON.parse(existing) : [];
         await AsyncStorage.setItem('symponia_echo_nodes', JSON.stringify([...parsed, node]));
+
+        // A real exchange happened. Owe them the 'how are you leaving?' — collected
+        // on the home screen, NOT here. Interrupting the moment a reflection lands
+        // to ask someone to rate themselves would undo the reflection.
+        AsyncStorage.setItem('symponia_mood_after_due', '1').catch(() => {});
       },
       (err) => {
         // Every failure lands here (never in onComplete), so a message that
@@ -743,10 +766,25 @@ export default function DialogoScreen() {
         if (err.message === 'AI_CONSENT_REQUIRED') {
           setMessages((prev) => prev.filter((m) => m.id !== botId));
           Alert.alert(
-            'AI consent required',
-            'You have not granted permission for AI processing. Enable it in Profile → Data & Account.',
-            [{ text: 'OK' }],
+            t('AI consent required'),
+            t('You have not granted permission for AI processing. Enable it in Profile → Data & Account.'),
+            [{ text: t('OK') }],
           );
+          return;
+        }
+
+        // Fair use: nothing was spent, nothing is "used up". Take the unanswered
+        // message back out and show the quiet overlay with the reopen time.
+        if (err instanceof FairUseError) {
+          setMessages((prev) => prev.filter((m) => m.id !== botId));
+          setFairUse({ kind: err.kind, resetAt: err.resetAt });
+          return;
+        }
+
+        // Trial finished — this one IS a paywall, and honestly so.
+        if (err instanceof TrialExhaustedError) {
+          setMessages((prev) => prev.filter((m) => m.id !== botId));
+          router.push('/paywall');
           return;
         }
 
@@ -782,9 +820,9 @@ export default function DialogoScreen() {
         setShowArchetype(false);
         setArchetypeLoading(false);
         Alert.alert(
-          'AI consent required',
-          'You have not granted permission for AI processing. Enable it in Profile → Data & Account.',
-          [{ text: 'OK' }],
+          t('AI consent required'),
+          t('You have not granted permission for AI processing. Enable it in Profile → Data & Account.'),
+          [{ text: t('OK') }],
         );
       },
     );
@@ -828,12 +866,12 @@ export default function DialogoScreen() {
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 Alert.alert(
-                  'Start a new session?',
-                  'This clears the current conversation. Everything in this chat will be erased and cannot be recovered.',
+                  t('Start a new session?'),
+                  t('This clears the current conversation. Everything in this chat will be erased and cannot be recovered.'),
                   [
-                    { text: 'Cancel', style: 'cancel' },
+                    { text: t('Cancel'), style: 'cancel' },
                     {
-                      text: 'Clear chat',
+                      text: t('Clear chat'),
                       style: 'destructive',
                       onPress: () => {
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -851,18 +889,23 @@ export default function DialogoScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        {/* Trial only. Subscribers never see a counter — they're not metered, and
+            a depleting bar is the last thing someone working through something
+            hard should be looking at. The bar is scaled to the TRIAL size, not a
+            hardcoded 50: at TRIAL_TOKENS = 10 the old /50 made a brand-new user's
+            bar look 80% empty. */}
         {!isSubscribed && (
           <View style={[styles.tokenBarWrap, { borderBottomColor: colors.glassBorder }]}>
             <View style={styles.tokenBarRow}>
               <View style={styles.tokenBarTrack}>
-                <View style={[styles.tokenBarFill, { width: `${Math.min(tokens / 50, 1) * 100}%`, backgroundColor: tokens <= 3 ? '#e07070CC' : colors.cyan + 'CC' }]} />
+                <View style={[styles.tokenBarFill, { width: `${Math.min(tokens / TRIAL_TOKENS, 1) * 100}%`, backgroundColor: tokens <= 3 ? '#e07070CC' : colors.cyan + 'CC' }]} />
               </View>
             </View>
             <View style={styles.tokenBarLabels}>
               <Text style={[styles.tokenBarLabel, { color: tokens <= 3 ? '#e07070AA' : colors.cyan + 'AA' }]}>
-                {tokens} REFLECTION{tokens !== 1 ? 'S' : ''} REMAINING
+                {tokens === 1 ? t('1 FREE REFLECTION LEFT') : t('{n} FREE REFLECTIONS LEFT', { n: tokens })}
               </Text>
-              <Text style={[styles.tokenBarLabel, { color: colors.textDim }]}>1 REFLECTION = 1 RESPONSE</Text>
+              <Text style={[styles.tokenBarLabel, { color: colors.textDim }]}>{t('then unlimited with a subscription')}</Text>
             </View>
           </View>
         )}
@@ -1041,7 +1084,7 @@ export default function DialogoScreen() {
               style={[styles.textInput, { color: colors.text }]}
               value={inputText}
               onChangeText={setInputText}
-              placeholder={currentMode === 'animal' && userAnimals.length === 0 && localAnimals.length === 0 ? 'tap animals above...' : 'speak — in any language…'}
+              placeholder={currentMode === 'animal' && userAnimals.length === 0 && localAnimals.length === 0 ? t('tap animals above...') : t('speak — in any language…')}
               placeholderTextColor={colors.textDim}
               multiline
               returnKeyType="default"
@@ -1068,36 +1111,41 @@ export default function DialogoScreen() {
         />
       )}
 
-      {/* Subscriber reflections depleted overlay */}
-      {showSubscriberEmpty && (
+      {/* Fair-use overlay.
+          NOT a paywall. Nothing has been spent and there is nothing to buy — the
+          only useful thing to say is when they can come back. The tone is the
+          point: someone reaches this while working through something, and the
+          worst possible response would be to sell them something. */}
+      {fairUse && (
         <Animated.View
           entering={FadeIn.duration(250)}
           style={[StyleSheet.absoluteFill, styles.tokenOverlay, { backgroundColor: isDark ? 'rgba(6,4,20,0.92)' : colors.bg + 'E8' }]}
         >
-          <TouchableWithoutFeedback onPress={() => setShowSubscriberEmpty(false)}>
+          <TouchableWithoutFeedback onPress={() => setFairUse(null)}>
             <View style={StyleSheet.absoluteFill} />
           </TouchableWithoutFeedback>
           <View style={[styles.tokenSheet, { borderColor: colors.cyanBorder }]}>
             <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
             <View style={[styles.tokenSheetBg, { backgroundColor: isDark ? 'rgba(8,6,28,0.6)' : colors.bgMid + '99' }]} />
-            <Text style={[styles.tokenTitle, { color: colors.cyan }]}>REFLECTIONS RENEWED SOON</Text>
-            <Text style={[styles.tokenBody, { color: colors.textSub }]}>
-              {"You've used all 350 reflections for this month."}
+            <Text style={[styles.tokenTitle, { color: colors.cyan }]}>
+              {fairUse.kind === 'burst' ? t('A PAUSE') : t('A LOT THIS WEEK')}
             </Text>
-            {subscriptionExpiry && (
+            <Text style={[styles.tokenBody, { color: colors.textSub }]}>
+              {fairUse.kind === 'burst'
+                ? t("You've been going for a while. Let this settle before the next one.")
+                : t("You've been deep in this a lot this week. That's allowed — but let it rest a little.")}
+            </Text>
+            {fairUse.resetAt && (
               <Text style={[styles.tokenBody, { color: colors.textDim, fontSize: 13 }]}>
-                {`Your reflections renew on ${new Date(subscriptionExpiry).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}.`}
+                {t('You can continue from {time}.', {
+                  time: new Date(fairUse.resetAt).toLocaleString(getLocale(), {
+                    weekday: 'long', hour: 'numeric', minute: '2-digit',
+                  }),
+                })}
               </Text>
             )}
-            <TouchableOpacity
-              style={[styles.tokenBtn, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder, marginTop: 8 }]}
-              onPress={() => Linking.openURL('itms-apps://apps.apple.com/account/subscriptions')}
-              activeOpacity={0.75}
-            >
-              <Text style={[styles.tokenBtnText, { color: colors.cyan }]}>manage subscription</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowSubscriberEmpty(false)} style={styles.tokenDismiss}>
-              <Text style={[styles.tokenDismissText, { color: colors.textDim }]}>not now</Text>
+            <TouchableOpacity onPress={() => setFairUse(null)} style={styles.tokenDismiss}>
+              <Text style={[styles.tokenDismissText, { color: colors.textDim }]}>{t('close')}</Text>
             </TouchableOpacity>
           </View>
         </Animated.View>

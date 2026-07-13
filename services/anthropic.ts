@@ -1,6 +1,7 @@
 import { SUPABASE_URL } from '@/constants/config';
 import { supabase } from './supabase';
 import { buildMemoryContext } from './memory';
+import { getLanguage } from '@/constants/i18n';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Keep only the last MAX_HISTORY_TURNS user+assistant pairs to bound input tokens.
@@ -73,6 +74,25 @@ function streamSSE(
       if (!res.ok) {
         const err = await res.text().catch(() => '');
 
+        // Fair use (429) and trial-finished (402) are not errors in the "something
+        // broke" sense — they're states the UI must render specifically, not as
+        // "the current shifted".
+        if (res.status === 429 || res.status === 402) {
+          let parsed: any = {};
+          try { parsed = JSON.parse(err); } catch {}
+          if (parsed.code === 'FAIR_USE_WEEK' || parsed.code === 'FAIR_USE_BURST') {
+            onError?.(new FairUseError(
+              parsed.code === 'FAIR_USE_BURST' ? 'burst' : 'week',
+              parsed.resetAt ?? null,
+            ));
+            return;
+          }
+          if (parsed.code === 'TRIAL_EXHAUSTED' || res.status === 402) {
+            onError?.(new TrialExhaustedError());
+            return;
+          }
+        }
+
         // If Edge function tells us the token is dead or user is deleted, force log out.
         if (err.includes('Auth failed') || err.includes('Unauthorized') || err.includes('missing sub claim')) {
           supabase.auth.signOut().then(() => {
@@ -136,6 +156,7 @@ export function streamChat(
       mode,
       resonanceFrequency,
       messages,
+      language: getLanguage(),
     };
 
     // Route ALL errors to the caller's onError — never through onComplete/onToken.
@@ -155,6 +176,32 @@ export class RateLimitError extends Error {
     super('Daily reflection rate limit exceeded');
     this.name = 'RateLimitError';
     this.retryAfter = retryAfter;
+  }
+}
+
+/**
+ * A subscriber reached the fair-use window (50 / 7 days, or 15 / 5 hours).
+ *
+ * This is NOT "you have run out" — nothing was spent. It carries the moment the
+ * window reopens, because the only useful thing to tell someone here is when
+ * they can come back, not that they have exhausted a balance.
+ */
+export class FairUseError extends Error {
+  resetAt: string | null;
+  kind: 'week' | 'burst';
+  constructor(kind: 'week' | 'burst', resetAt: string | null) {
+    super('Fair use window reached');
+    this.name = 'FairUseError';
+    this.kind = kind;
+    this.resetAt = resetAt;
+  }
+}
+
+/** The 10-reflection free trial is finished. Distinct from fair use. */
+export class TrialExhaustedError extends Error {
+  constructor() {
+    super('Trial finished');
+    this.name = 'TrialExhaustedError';
   }
 }
 
@@ -182,6 +229,7 @@ export async function generateDailyReflection(
     model: 'claude-sonnet-4-6',
     max_tokens: 300,
     mode: 'daily-reflection',
+    language: getLanguage(),
     context: {
       name: context.name,
       animals: context.animals ?? [],
@@ -209,6 +257,66 @@ export async function generateDailyReflection(
   return text;
 }
 
+/**
+ * The opening message of a session, in the user's language.
+ *
+ * Opening messages are built on-device and pushed into the chat as assistant
+ * messages, which render with <Text raw> — so the i18n dictionaries can never
+ * reach them. Correct for English; for the other eight languages it meant the
+ * app greeted you in English and only switched once you replied.
+ *
+ * The English reading goes up, Claude writes the same reading in the user's
+ * language (composed, not translated — same structure, native prose), and the
+ * result is cached per language + animal set, so this normally fires once.
+ *
+ * FAIL-SAFE BY CONSTRUCTION: English short-circuits before any network call, and
+ * every failure path returns the English source unchanged. This function can
+ * never render the app worse than it is today — the worst case IS today.
+ */
+export async function localizeOpening(englishOpening: string): Promise<string> {
+  const lang = getLanguage();
+  if (lang === 'en' || !englishOpening.trim()) return englishOpening;
+
+  // Cache key: language + a cheap stable hash of the source. Changing animals or
+  // language produces a new key; nothing else re-triggers generation.
+  let h = 0;
+  for (let i = 0; i < englishOpening.length; i++) {
+    h = (Math.imul(31, h) + englishOpening.charCodeAt(i)) | 0;
+  }
+  const cacheKey = `symponia_opening_${lang}_${h >>> 0}`;
+
+  try {
+    const cached = await AsyncStorage.getItem(cacheKey);
+    if (cached) return cached;
+  } catch {}
+
+  try {
+    const consent = await AsyncStorage.getItem('symponia_ai_consent');
+    if (consent !== 'true') return englishOpening;
+
+    const token = await getValidToken();
+    if (!token) return englishOpening;
+
+    const res = await fetch(ORACLE_URL, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'opening', language: lang, source: englishOpening }),
+    });
+    if (!res.ok) return englishOpening;
+
+    const json = await res.json();
+    const opening = (json.opening ?? '').trim();
+    if (!opening) return englishOpening;
+
+    try {
+      await AsyncStorage.setItem(cacheKey, opening);
+    } catch {}
+    return opening;
+  } catch {
+    return englishOpening;
+  }
+}
+
 export function streamAnimalSynthesis(
   animals: string[], // session animals — used for exploration, oracle prefers these over profile
   onToken: (token: string) => void,
@@ -219,6 +327,7 @@ export function streamAnimalSynthesis(
     model: 'claude-sonnet-4-6',
     max_tokens: 300,
     mode: 'synthesis',
+    language: getLanguage(),
     sessionAnimals: animals,
   };
 
@@ -245,6 +354,7 @@ export function streamArchetype(
     model: 'claude-sonnet-4-6',
     max_tokens: 200,
     mode: 'archetype',
+    language: getLanguage(),
     word,
     resonanceFrequency,
   };

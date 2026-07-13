@@ -30,8 +30,12 @@ const PRODUCT_TOKENS: Record<string, number> = {
   'com.symponia.tokens500': 500,
 };
 
-const SUBSCRIPTION_IDS = new Set(['com.symponia.premium.monthly']);
-const SUBSCRIPTION_TOKENS_PER_PERIOD = 350;
+// Subscription products. No quotas — a subscription grants ACCESS, and usage is
+// governed by the fair-use window in the oracle. Every live subscription id MUST
+// appear here or its purchases won't be recognised.
+const SUBSCRIPTION_IDS = new Set([
+  'com.symponia.premium.monthly',
+]);
 
 const ALL_KNOWN_PRODUCT_IDS = new Set([
   'com.symponia.premium.monthly',
@@ -256,14 +260,21 @@ Deno.serve(async (req: Request) => {
       user_id: userId,
       ...(!existingExpiresAt || expiresAt >= existingExpiresAt ? { subscription_expires_at: expiresAt } : {}),
       ...(originalTxId ? { original_transaction_id: originalTxId } : {}),
+      // Which plan, so the app can stop assuming "monthly".
+      subscription_product_id: verifiedId,
     };
 
     if (isNewBillingPeriod) {
-      upsertPayload.tokens = SUBSCRIPTION_TOKENS_PER_PERIOD;
+      // NO QUOTA IS GRANTED. A subscription is access until `expiresAt`; usage is
+      // governed by the fair-use window in the oracle, not by a balance.
+      //
+      // This is what deleted an entire class of bug: previously a flat 350 was
+      // granted per period, so a *weekly* subscriber would have been handed the
+      // full monthly allowance every single week.
       upsertPayload.tokens_reset_at = new Date().toISOString();
-      console.log(`subscription new period — reset to ${SUBSCRIPTION_TOKENS_PER_PERIOD} tokens, expires ${expiresAt} → user ${userId}`);
+      console.log(`subscription new period — ${verifiedId}, access until ${expiresAt} → user ${userId}`);
     } else {
-      console.log(`subscription replay — skipping token reset, expires ${expiresAt} → user ${userId}`);
+      console.log(`subscription replay — expires ${expiresAt} → user ${userId}`);
     }
 
     const { error } = await adminClient

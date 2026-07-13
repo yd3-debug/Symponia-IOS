@@ -27,6 +27,45 @@ const FREQ_NORMALIZE: Record<string, string> = {
   'Quiet':            'Still',
 };
 
+// ── Fair use ────────────────────────────────────────────────────────────────
+// Subscribers are not metered. These exist only to stop abuse, and are the ONE
+// place a number lives — the app never shows a count of what's left.
+//
+// THE APP IS UNLIMITED. This is an anti-abuse floor, not a product limit, and it
+// is set where no human being reflecting in good faith will ever find it.
+//
+// Sizing it required getting the cost right first. A real conversation costs
+// ~$0.0118/message, NOT the $0.022 an earlier estimate assumed — that figure
+// priced every message as if it carried a full 10k-token history and a maxed
+// 750-token reply, i.e. it charged the last message of a maxed-out conversation
+// as if it were all of them. With caching working, early turns are nearly free.
+//
+// True break-even at £19.99 is ~305 messages/week — 44 every single day, forever.
+//
+// Against real behaviour (1 reflection = 1 message; people who open up have a
+// conversation, 10-20 in a sitting is normal):
+//
+//   regular    (3 sessions/wk × 12)  =  36/week
+//   engaged    (5 sessions/wk × 15)  =  75/week
+//   heavy      (every day × 15)      = 105/week
+//   very heavy (every day × 20)      = 140/week
+//
+// 250/week is 36 messages a day, every day, indefinitely. Nobody in that list is
+// within sight of it. It exists so that a leaked account cannot run a bot on our
+// API key — which, unbounded, is exactly how Copilot ended up paying ~$30/user
+// of compute on a $10 subscription.
+//
+// Weekly, not daily, on purpose: a daily cap punishes the person having one hard
+// day, who is precisely who this app exists for.
+const FAIR_USE_WEEK_MAX = 250;
+const FAIR_USE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Burst: anti-script, not anti-human. 60 in five hours is far past any real
+// sitting — a 40-message marathon still passes clean. Earlier drafts used 15,
+// which would have cut a normal user off mid-conversation.
+const FAIR_USE_BURST_MAX = 60;
+const FAIR_USE_BURST_MS = 5 * 60 * 60 * 1000;
+
 Deno.serve(async (req: Request) => {
   // Preflight
   if (req.method === 'OPTIONS') {
@@ -81,6 +120,20 @@ Deno.serve(async (req: Request) => {
   if (totalContentLen > 50000) {
     return jsonError('Content too large', 'CONTENT_TOO_LARGE', 400);
   }
+
+
+  // ── Language ──────────────────────────────────────────────────────────────
+  // The language the user picked in onboarding. The reply must come back in it,
+  // even though injected memories/context may be in another language.
+  const LANG_NAMES: Record<string, string> = {
+    en: 'English', es: 'Spanish', pt: 'Brazilian Portuguese', fr: 'French',
+    de: 'German', it: 'Italian', ru: 'Russian', da: 'Danish', sv: 'Swedish', no: 'Norwegian',
+  };
+  const langCode: string = typeof body.language === 'string' ? body.language : 'en';
+  const langName: string = LANG_NAMES[langCode] ?? 'English';
+  const LANGUAGE_RULE = langCode === 'en'
+    ? ''
+    : `\n\n\u2550\u2550\u2550 LANGUAGE \u2550\u2550\u2550\nWrite your entire response in ${langName}, and only in ${langName}. This holds no matter what language the context, memories, or earlier messages are written in. Never mix languages. Keep exactly the same depth, nuance and register you would have in English.`;
 
   // ── Admin client (service role) — used by both paths ─────────────────────
   const admin = createClient(
@@ -165,7 +218,7 @@ Deno.serve(async (req: Request) => {
     const reflectionBody = {
       model: body.model ?? 'claude-sonnet-4-6',
       max_tokens: 300,
-      system: DAILY_REFLECTION_PROMPT,
+      system: DAILY_REFLECTION_PROMPT + LANGUAGE_RULE,
       messages: [{ role: 'user', content: userMessage }],
     };
 
@@ -226,8 +279,175 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // ── Token & Profile check (all non-daily-reflection modes) ───────────────
-  // Use service role to read/write profiles without RLS getting in the way
+  // ── Usage fast path ───────────────────────────────────────────────────────
+  // Powers the Usage view in Settings. Read-only, no AI call, no cost.
+  // Deliberately returns a WINDOW and a RESET TIME, not "tokens remaining" —
+  // the app should never present someone's inner life as a depleting balance.
+  if (body.mode === 'usage') {
+    const { data: p } = await admin
+      .from('profiles')
+      .select('subscription_expires_at, tokens, topup_tokens, subscription_tokens')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    const exp: string | null = p?.subscription_expires_at ?? null;
+    const subscribed = !!exp && new Date(exp) > new Date();
+
+    if (!subscribed) {
+      const left = (p?.tokens ?? 0) + (p?.topup_tokens ?? 0) + (p?.subscription_tokens ?? 0);
+      return new Response(
+        JSON.stringify({ subscribed: false, trialLeft: Math.max(0, left) }),
+        { status: 200, headers: JSON_HEADERS },
+      );
+    }
+
+    const since = new Date(Date.now() - FAIR_USE_WEEK_MS).toISOString();
+    const { count } = await admin
+      .from('rate_limit_reflections')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', since);
+
+    // Reset = when the OLDEST reflection in the window ages out.
+    const { data: oldest } = await admin
+      .from('rate_limit_reflections')
+      .select('created_at')
+      .eq('user_id', user.id)
+      .gte('created_at', since)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    return new Response(
+      JSON.stringify({
+        subscribed: true,
+        used: count ?? 0,
+        limit: FAIR_USE_WEEK_MAX,
+        resetAt: oldest
+          ? new Date(new Date(oldest.created_at).getTime() + FAIR_USE_WEEK_MS).toISOString()
+          : null,
+        renewsAt: exp,
+      }),
+      { status: 200, headers: JSON_HEADERS },
+    );
+  }
+
+  // ── Opening fast path ─────────────────────────────────────────────────────
+  // The first thing Symponia says in a session is built on the client
+  // (buildAnimalGreeting) and pushed straight into the message list, where it
+  // renders with <Text raw> — so the i18n dictionaries can never reach it. For
+  // English that is exactly right. For the other eight languages it meant the
+  // app opened in English and only switched once the user replied.
+  //
+  // So: the client sends the English reading it just composed, and Claude writes
+  // the SAME reading in the user's language — composed, not translated, with the
+  // card structure preserved verbatim. No token is deducted (this is not a
+  // reflection, it is the app speaking its own copy), and the client caches the
+  // result, so this normally fires once per animal set per language.
+  if (body.mode === 'opening') {
+    const source: string = typeof body.source === 'string' ? body.source : '';
+    if (!source || source.length > 8000) {
+      return jsonError('Missing or oversized source', 'BAD_REQUEST', 400);
+    }
+    // English never needs this — the client has the deterministic string already.
+    if (langCode === 'en') {
+      return new Response(JSON.stringify({ opening: source }), {
+        status: 200, headers: JSON_HEADERS,
+      });
+    }
+
+    // Rate limit: 10 per user per rolling 30 DAYS — not per day.
+    //
+    // This path deducts no token, and at ~3.7c a call a 20/day limit exposed
+    // ~$22/user/month of free inference to anyone holding a session. A real user
+    // hits this once or twice ever: the result is cached on-device per language +
+    // animal set, so it only regenerates if they switch language or redo their
+    // animals. 10 per month is generous for that and caps abuse at ~$0.37.
+    const openWindow = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { count: openCount, error: openCountErr } = await admin
+      .from('rate_limit_opening')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', openWindow);
+
+    if (openCountErr) {
+      console.error('Opening rate limit check failed:', openCountErr);
+      return jsonError('Rate limit check failed', 'INTERNAL_ERROR', 500);
+    }
+    if ((openCount ?? 0) >= 10) {
+      return jsonError('Rate limit exceeded', 'RATE_LIMITED', 429);
+    }
+
+    const openingBody = {
+      model: 'claude-sonnet-4-6',
+      max_tokens: 3000, // the 7-card archetype reading is long; the global 750 cap does not apply here
+      system:
+        `You are Symponia. Below is an opening reading you have just composed, written in English.\n\n` +
+        `Write that same reading in ${langName}.\n\n` +
+        `This is NOT a word-for-word translation. Write it as a native ${langName} speaker would ` +
+        `write it — natural rhythm, natural register, the same quiet, unhurried, non-clinical voice.\n\n` +
+        `Preserve the structure EXACTLY: the same line breaks, the same blank lines, the same numbering, ` +
+        `the same separator characters (·, —, ✦, etc.), the same order of cards and sections. ` +
+        `Do not add, remove, merge or reorder anything. Do not add a preamble, a title or a closing remark.\n\n` +
+        `Animal names are proper nouns: render them in ${langName} (a Wolf is ein Wolf, un loup, волк). ` +
+        `Keep them in the same case as the English (UPPERCASE stays uppercase).\n\n` +
+        `Output the reading and nothing else.`,
+      messages: [{ role: 'user', content: source }],
+    };
+
+    const openRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(openingBody),
+    });
+
+    if (!openRes.ok) {
+      console.error('Anthropic error for opening:', await openRes.text());
+      return jsonError('Upstream API error', 'ANTHROPIC_ERROR', 500);
+    }
+
+    const openJson = await openRes.json();
+    const opening = (openJson.content?.[0]?.text ?? '').trim();
+    if (!opening) {
+      return jsonError('Empty response from AI', 'EMPTY_RESPONSE', 500);
+    }
+
+    admin
+      .from('rate_limit_opening')
+      .insert({ user_id: user.id })
+      .then(({ error }: { error: any }) => {
+        if (error) console.error('Opening rate limit insert failed:', error);
+      });
+
+    (async () => {
+      try {
+        const usage = openJson?.usage;
+        if (usage) {
+          await admin.from('api_usage').insert({
+            user_id: user.id,
+            model: openJson.model ?? openingBody.model,
+            input_tokens: usage.input_tokens ?? 0,
+            output_tokens: usage.output_tokens ?? 0,
+            cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
+            cache_read_input_tokens: usage.cache_read_input_tokens ?? 0,
+          });
+        }
+      } catch (e) {
+        console.error('Usage log failed:', e);
+      }
+    })();
+
+    return new Response(JSON.stringify({ opening }), {
+      status: 200,
+      headers: JSON_HEADERS,
+    });
+  }
+
+  // ── Profile ───────────────────────────────────────────────────────────────
   const { data: profileData, error: profileError } = await admin
     .from('profiles')
     .select('*')
@@ -236,21 +456,98 @@ Deno.serve(async (req: Request) => {
 
   if (profileError) console.error('Profile fetch error:', profileError);
 
-  // Use safe defaults if profile is missing — never block a user over a missing row
-  const profile = profileData ?? { tokens: 3, frequency: 'Intellectual', name: null, gender: null, animals: null, subscription_expires_at: null, subscription_tokens: 0, topup_tokens: 0 };
+  // Safe defaults if the row is missing — never block a user over a missing row.
+  const profile = profileData ?? { tokens: 0, frequency: 'Intellectual', name: null, gender: null, animals: null, subscription_expires_at: null, subscription_tokens: 0, topup_tokens: 0 };
 
-  const subTokens   = profile.subscription_tokens ?? 0;
-  const topupTokens = profile.topup_tokens ?? 0;
+  // ── Access check ──────────────────────────────────────────────────────────
+  //
+  // Subscriptions are ACCESS UNTIL A DATE, not a bucket of tokens. There is no
+  // quota to grant, sync across three files, or run out of mid-month. A
+  // subscriber reflects as much as they need; fair use only exists to stop abuse,
+  // and is set high enough that a person in a hard week never meets it.
+  //
+  // Free users keep a lifetime trial balance (profiles.tokens). That is the only
+  // place a counter still exists.
+  const expiresAt: string | null = profile.subscription_expires_at ?? null;
+  const isSubscriber = !!expiresAt && new Date(expiresAt) > new Date();
 
-  if (subTokens <= 0 && topupTokens <= 0) {
-    return new Response('Insufficient tokens', { status: 402, headers: CORS });
+  if (!isSubscriber) {
+    // Trial: legacy columns are honoured so nobody loses what they paid for.
+    const trialLeft = (profile.tokens ?? 0) + (profile.subscription_tokens ?? 0) + (profile.topup_tokens ?? 0);
+    if (trialLeft <= 0) {
+      return jsonError('Trial finished', 'TRIAL_EXHAUSTED', 402);
+    }
+  } else {
+    // ── Fair use ────────────────────────────────────────────────────────────
+    // Modelled on Claude's own limits: a long window that constrains
+    // *consistently* intensive use, plus a short burst window that stops a
+    // script. Deliberately NOT a daily cap — a daily cap punishes the person
+    // having one hard day, who is exactly who this app is for. The weekly
+    // window lets them have that day and only bites sustained abuse.
+    const { count: weekCount, error: weekErr } = await admin
+      .from('rate_limit_reflections')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', new Date(Date.now() - FAIR_USE_WEEK_MS).toISOString());
+
+    if (weekErr) {
+      // Fail OPEN. A limiter outage must never lock a paying subscriber out of
+      // the thing they are paying for.
+      console.error('Fair-use week check failed (allowing):', weekErr);
+    } else if ((weekCount ?? 0) >= FAIR_USE_WEEK_MAX) {
+      const { data: oldest } = await admin
+        .from('rate_limit_reflections')
+        .select('created_at')
+        .eq('user_id', user.id)
+        .gte('created_at', new Date(Date.now() - FAIR_USE_WEEK_MS).toISOString())
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      const resetAt = oldest
+        ? new Date(new Date(oldest.created_at).getTime() + FAIR_USE_WEEK_MS).toISOString()
+        : new Date(Date.now() + FAIR_USE_WEEK_MS).toISOString();
+      return new Response(
+        JSON.stringify({ error: 'Fair use reached', code: 'FAIR_USE_WEEK', resetAt }),
+        { status: 429, headers: JSON_HEADERS },
+      );
+    }
+
+    const { count: burstCount, error: burstErr } = await admin
+      .from('rate_limit_reflections')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', new Date(Date.now() - FAIR_USE_BURST_MS).toISOString());
+
+    if (burstErr) {
+      console.error('Fair-use burst check failed (allowing):', burstErr);
+    } else if ((burstCount ?? 0) >= FAIR_USE_BURST_MAX) {
+      const { data: oldest } = await admin
+        .from('rate_limit_reflections')
+        .select('created_at')
+        .eq('user_id', user.id)
+        .gte('created_at', new Date(Date.now() - FAIR_USE_BURST_MS).toISOString())
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      const resetAt = oldest
+        ? new Date(new Date(oldest.created_at).getTime() + FAIR_USE_BURST_MS).toISOString()
+        : new Date(Date.now() + FAIR_USE_BURST_MS).toISOString();
+      return new Response(
+        JSON.stringify({ error: 'Slow down', code: 'FAIR_USE_BURST', resetAt }),
+        { status: 429, headers: JSON_HEADERS },
+      );
+    }
   }
 
   // ── Server-Side Prompt Construction ───────────────────────────────────────
 
-  // Handle special 'archetype' mode override
+  // Handle special 'archetype' mode override.
+  // Long-press is a ~100-word definitional lookup, not the reflective voice, so
+  // it runs on Haiku: 3x cheaper, and none of the depth that Sonnet is here for
+  // is at stake. Chat and the daily reflection stay on Sonnet deliberately.
   if (body.mode === 'archetype' && body.word) {
     body.messages = [{ role: 'user', content: buildArchetypePrompt(body.word) }];
+    body.model = 'claude-haiku-4-5-20251001';
   }
 
   // Handle special 'synthesis' mode override for the 7 animal structured view
@@ -265,7 +562,7 @@ Deno.serve(async (req: Request) => {
   if (isSynthesisWithAnimals) {
     const POSITION_LABELS = ['Primary', '2nd Force', '3rd Force', 'Bridge', 'Bridge', 'Threshold', 'The Shadow'];
     const animalList = synthesisAnimals.map((a: string, i: number) => `${POSITION_LABELS[i] ?? String(i + 1)}: ${a}`).join('; ');
-    body.system = `You are a soul oracle who reads character through animal archetypes. You have been given seven animals that belong to one person: ${animalList}. Write a 3–5 sentence non-judgmental character synthesis that describes the dominant energy of this person, the interplay between their primary animal and their shadow animal, and the essential quality this whole constellation reveals about who they are. Write in second person. Pure flowing prose. No markdown, no lists, no line breaks between sentences. No spiritual clichés. Do not name the animals explicitly — speak to the qualities they embody.`;
+    body.system = `You are a soul oracle who reads character through animal archetypes. You have been given seven animals that belong to one person: ${animalList}. Write a 3–5 sentence non-judgmental character synthesis that describes the dominant energy of this person, the interplay between their primary animal and their shadow animal, and the essential quality this whole constellation reveals about who they are. Write in second person. Pure flowing prose. No markdown, no lists, no line breaks between sentences. No spiritual clichés. Do not name the animals explicitly — speak to the qualities they embody.` + LANGUAGE_RULE;
     body.messages = [{ role: 'user', content: 'Show me the synthesis.' }];
   } else {
     // For all other modes, split into a cacheable static block + a per-user dynamic block.
@@ -273,13 +570,35 @@ Deno.serve(async (req: Request) => {
     const mode = body.mode === 'synthesis' ? 'oracle' : body.mode;
     const animals = body.mode === 'synthesis' ? undefined : profile.animals;
 
-    const { staticText, dynamicText } = buildSystemPromptParts(freq, mode, profile.name, profile.gender, animals);
+    // profile.attune — the nine intake answers. Passed into the DYNAMIC block so
+    // it never pollutes the cached static prefix, and so the first reply already
+    // knows who it is speaking to.
+    const { staticText, dynamicText } = buildSystemPromptParts(freq, mode, profile.name, profile.gender, animals, profile.attune ?? undefined);
 
-    // Two-block system: static block is cached on the Anthropic side, dynamic is not.
+    // ── Prompt caching ───────────────────────────────────────────────────────
+    // Before: only the static system block was cached, and the conversation
+    // history (up to 20 messages, ~10k tokens) was re-sent at FULL input price
+    // ($3.00/MTok) on every single turn. That was ~67% of the cost of a long
+    // reflection and made the plans lose money on heavy users.
+    //
+    // Now: `cache_control` at the top level enables automatic caching, which
+    // moves the breakpoint forward as the conversation grows — so system +
+    // history are re-read at $0.30/MTok instead. Same data sent, same output,
+    // one tenth the price on the repeated prefix.
+    //
+    // TTL is 1h, not the 5m default, for two reasons:
+    //   1. Symponia is contemplative. People sit with a reflection for minutes
+    //      before replying. A 5m cache would routinely expire between turns, and
+    //      a miss costs 1.25x base — i.e. it would end up MORE expensive.
+    //   2. Mixing TTLs is constrained: a longer-TTL entry must come BEFORE any
+    //      shorter one. The system block precedes the messages, so if the system
+    //      block stayed at 5m and the messages were 1h, the API returns 400 —
+    //      every chat request would fail. Both must be 1h.
     body.system = [
-      { type: 'text', text: staticText, cache_control: { type: 'ephemeral' } },
-      { type: 'text', text: dynamicText },
+      { type: 'text', text: staticText, cache_control: { type: 'ephemeral', ttl: '1h' } },
+      { type: 'text', text: dynamicText + LANGUAGE_RULE },
     ];
+    body.cache_control = { type: 'ephemeral', ttl: '1h' };
 
     if (body.mode === 'synthesis') {
       body.messages = [{ role: 'user', content: 'Show me the synthesis.' }];
@@ -288,6 +607,7 @@ Deno.serve(async (req: Request) => {
 
   // Strip custom fields before sending to Anthropic
   delete body.mode;
+  delete body.language;
   delete body.word;
   delete body.resonanceFrequency;
 
@@ -308,19 +628,35 @@ Deno.serve(async (req: Request) => {
     return new Response(err, { status: anthropicRes.status, headers: CORS });
   }
 
-  // ── Deduct token (fire-and-forget, don't block response) ──────────────────
-  // Deduct from subscription_tokens first; fall back to topup_tokens.
-  const deductUpdate = subTokens > 0
-    ? { subscription_tokens: subTokens - 1 }
-    : { topup_tokens: topupTokens - 1 };
+  // ── Record the reflection (fire-and-forget) ──────────────────────────────
+  // Subscribers: a row in the rolling window. Nothing is "spent".
+  // Trial users: still decrement the lifetime balance — that IS a finite trial,
+  // and it's the only counter left in the product.
+  if (isSubscriber) {
+    admin
+      .from('rate_limit_reflections')
+      .insert({ user_id: user.id })
+      .then(({ error }: { error: any }) => {
+        if (error) console.error('Fair-use record failed:', error);
+      });
+  } else {
+    // Drain the legacy columns in the same order they were granted, so nobody
+    // loses a top-up they paid for before the token system was retired.
+    const t = profile.tokens ?? 0;
+    const s = profile.subscription_tokens ?? 0;
+    const u = profile.topup_tokens ?? 0;
+    const deduct = s > 0 ? { subscription_tokens: s - 1 }
+                 : u > 0 ? { topup_tokens: u - 1 }
+                 : { tokens: Math.max(0, t - 1) };
 
-  admin
-    .from('profiles')
-    .update(deductUpdate)
-    .eq('user_id', user.id)
-    .then(({ error }: { error: any }) => {
-      if (error) console.error('Token deduct failed:', error);
-    });
+    admin
+      .from('profiles')
+      .update(deduct)
+      .eq('user_id', user.id)
+      .then(({ error }: { error: any }) => {
+        if (error) console.error('Trial deduct failed:', error);
+      });
+  }
 
   // ── Buffer response, log usage, return ────────────────────────────────────
   // All client calls currently use stream:false, so Anthropic returns a single

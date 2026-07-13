@@ -7,7 +7,12 @@ import { requestNotificationPermission, scheduleDaily, scheduleMonthly, schedule
 import { restorePurchases, verifyAndFinishPurchase, initIAP, fetchStoreSubscriptions, triggerSubscription, SUBSCRIPTION_PRODUCTS, type ProductPurchase, type SubscriptionProductId } from '@/services/iap';
 import { clearAllConversations } from '@/services/conversations';
 import { setMemoryEnabled, syncMemoryFlag } from '@/services/memory';
-import { checkSubscription, syncTokens } from '@/services/supabaseTokens';
+import { t, getLocale, LANGUAGES, getLanguage, useT, type Lang } from '@/constants/i18n';
+import { saveLanguage } from '@/services/language';
+import { checkSubscription, getActivePlanId, syncTokens } from '@/services/supabaseTokens';
+import { fetchUsage, type Usage } from '@/services/usage';
+import { MoodWeek } from '@/components/MoodWeek';
+import { fetchMoodWeek, type MoodRow } from '@/services/mood';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
@@ -23,11 +28,11 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Text } from '@/components/Text';
 import Animated, { FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -113,6 +118,33 @@ function Section({ children, index }: { children: React.ReactNode; index: number
   );
 }
 
+/**
+ * A quiet heading that breaks the settings list into groups.
+ *
+ * Twelve cards in a single column is a wall — everything looks equally
+ * important, so nothing does. These four headings give the page a shape:
+ * what you're using, who you are, how it behaves, and the way out.
+ */
+function GroupHeading({ label, first }: { label: string; first?: boolean }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ marginTop: first ? 4 : 26, marginBottom: 8, paddingHorizontal: 4 }}>
+      <Text
+        style={{
+          fontSize: 11,
+          fontFamily: FONT,
+          fontWeight: '600',
+          letterSpacing: 1.6,
+          color: colors.cyan,
+          opacity: 0.75,
+        }}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 // ── AI Consent Row ────────────────────────────────────────────────────────────
 
 function AIConsentRow({ colors }: { colors: any }) {
@@ -146,15 +178,15 @@ function AIConsentRow({ colors }: { colors: any }) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (!consented) {
       Alert.alert(
-        'Turn on AI processing?',
-        "Symponia will send your messages to Anthropic's Claude to generate your reflections.",
-        [{ text: 'cancel', style: 'cancel' }, { text: 'turn on', onPress: enable }],
+        t('Turn on AI processing?'),
+        t("Symponia will send your messages to Anthropic's Claude to generate your reflections."),
+        [{ text: t('cancel'), style: 'cancel' }, { text: t('turn on'), onPress: enable }],
       );
     } else {
       Alert.alert(
-        'Revoke AI processing consent?',
-        "This turns off chat and reflections — your messages will no longer be sent to Anthropic's Claude. You can turn it back on here anytime.",
-        [{ text: 'cancel', style: 'cancel' }, { text: 'revoke', style: 'destructive', onPress: revoke }],
+        t('Revoke AI processing consent?'),
+        t("This turns off chat and reflections — your messages will no longer be sent to Anthropic's Claude. You can turn it back on here anytime."),
+        [{ text: t('cancel'), style: 'cancel' }, { text: t('revoke'), style: 'destructive', onPress: revoke }],
       );
     }
   };
@@ -210,14 +242,27 @@ export default function ProfiloScreen() {
 
   const [tokens, setTokens] = useState(TRIAL_TOKENS);
   const [isSubscribed, setIsSubscribed] = useState(false);
+  // Which plan they're actually on. Null while loading or when not subscribed;
+  // the UI falls back to the monthly copy, which is what every existing
+  // subscriber is on, so nothing regresses for them.
+  const [activePlanId, setActivePlanId] = useState<string | null>(null);
+  // Fair-use window for subscribers. Null while loading / on failure — Settings
+  // then simply renders nothing rather than showing a wrong number.
+  const [usage, setUsage] = useState<Usage | null>(null);
+  const [moodRows, setMoodRows] = useState<MoodRow[]>([]);
+  const activePlan = activePlanId
+    ? SUBSCRIPTION_PRODUCTS.find((p) => p.id === activePlanId) ?? null
+    : null;
   const [subscriptionExpiry, setSubscriptionExpiry] = useState('');
   const [isRestoring, setIsRestoring] = useState(false);
   const [isPurchasingSub, setIsPurchasingSub] = useState(false);
-  const [subProducts, setSubProducts] = useState<{ productId: string; localizedPrice: string }[]>([]);
+  const [subProducts, setSubProducts] = useState<{ productId: string; localizedPrice: string; trialDays: number | null }[]>([]);
   const [pricesError, setPricesError] = useState(false);
   const [userAnimals, setUserAnimals] = useState<string[]>([]);
   const [userEmail, setUserEmail] = useState('');
   const [memoryOn, setMemoryOn] = useState(false);
+  const [lang, setLangState] = useState<Lang>(getLanguage());
+  useT(); // re-render this screen when the language changes
   const archRef = useRef<View>(null);
   const settingsTip = useFirstTip('settings');
 
@@ -239,12 +284,12 @@ export default function ProfiloScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (!memoryOn) {
       Alert.alert(
-        'Turn on memory?',
-        'Symponia will store your reflections securely so it can remember your journey and get to know you over time. Your reflections are never used to train AI, and you can turn this off and delete everything anytime.',
+        t('Turn on memory?'),
+        t('Symponia will store your reflections securely so it can remember your journey and get to know you over time. Your reflections are never used to train AI, and you can turn this off and delete everything anytime.'),
         [
-          { text: 'not now', style: 'cancel' },
+          { text: t('not now'), style: 'cancel' },
           {
-            text: 'turn on',
+            text: t('turn on'),
             onPress: async () => {
               await setMemoryEnabled(true);
               setMemoryOn(true);
@@ -255,16 +300,16 @@ export default function ProfiloScreen() {
       );
     } else {
       Alert.alert(
-        'Turn off memory?',
-        'Symponia will stop storing new reflections. Would you also like to delete everything already stored?',
+        t('Turn off memory?'),
+        t('Symponia will stop storing new reflections. Would you also like to delete everything already stored?'),
         [
-          { text: 'cancel', style: 'cancel' },
+          { text: t('cancel'), style: 'cancel' },
           {
-            text: 'turn off, keep stored',
+            text: t('turn off, keep stored'),
             onPress: async () => { await setMemoryEnabled(false); setMemoryOn(false); },
           },
           {
-            text: 'turn off and delete',
+            text: t('turn off and delete'),
             style: 'destructive',
             onPress: async () => {
               await setMemoryEnabled(false);
@@ -334,9 +379,15 @@ export default function ProfiloScreen() {
     Promise.all([
       checkSubscription(),
       AsyncStorage.getItem('symponia_subscription_expires'),
-    ]).then(([subscribed, expires]) => {
+      getActivePlanId(),
+      fetchUsage(),
+      fetchMoodWeek(),
+    ]).then(([subscribed, expires, planId, u, mood]) => {
       setIsSubscribed(subscribed);
       if (expires) setSubscriptionExpiry(expires);
+      setActivePlanId(planId);
+      setUsage(u);
+      setMoodRows(mood);
     });
   }, []));
 
@@ -352,12 +403,12 @@ export default function ProfiloScreen() {
       if (type === 'daily') {
         // Show in-app pre-prompt before the iOS system dialog
         Alert.alert(
-          "A daily notification, if you'd like one.",
-          'Once a day, Symponia can send a short, centering thought shaped by your archetype. Nothing else.',
+          t("A daily notification, if you'd like one."),
+          t('Once a day, Symponia can send a short, centering thought shaped by your archetype. Nothing else.'),
           [
-            { text: 'Not now', style: 'cancel' },
+            { text: t('Not now'), style: 'cancel' },
             {
-              text: 'Yes, please',
+              text: t('Yes, please'),
               onPress: async () => {
                 const granted = await requestNotificationPermission();
                 if (!granted) return;
@@ -404,9 +455,9 @@ export default function ProfiloScreen() {
         drefl.find((n) => n.identifier === `symponia-drefl-${tomorrowKey}`)?.content.body ??
         drefl[0]?.content.body ??
         '(none generated)';
-      Alert.alert("Tomorrow's reflection", body);
+      Alert.alert(t("Tomorrow's reflection"), body);
     } catch (err: any) {
-      Alert.alert('Generation failed', err?.message ?? String(err));
+      Alert.alert(t('Generation failed'), err?.message ?? String(err));
     }
   };
 
@@ -437,7 +488,7 @@ export default function ProfiloScreen() {
       const purchases = await restorePurchases();
       console.log(`[Restore] getAvailablePurchases returned ${purchases.length} purchase(s)`);
       if (purchases.length === 0) {
-        Alert.alert('Nothing to restore', 'No previous purchases found for this Apple ID.');
+        Alert.alert(t('Nothing to restore'), t('No previous purchases found for this Apple ID.'));
         setIsRestoring(false);
         return;
       }
@@ -471,7 +522,7 @@ export default function ProfiloScreen() {
       }
       Alert.alert(restored ? 'Restored' : 'Nothing to restore', restored ? 'Your purchases have been restored.' : 'No purchases could be verified.');
     } catch (e: any) {
-      Alert.alert('Restore failed', e?.message ?? 'Something went wrong.');
+      Alert.alert(t('Restore failed'), e?.message ?? 'Something went wrong.');
     } finally {
       setIsRestoring(false);
     }
@@ -484,7 +535,7 @@ export default function ProfiloScreen() {
     try {
       await triggerSubscription(productId);
     } catch (e: any) {
-      Alert.alert('Purchase failed', e?.message ?? 'Something went wrong.');
+      Alert.alert(t('Purchase failed'), e?.message ?? 'Something went wrong.');
     } finally {
       setIsPurchasingSub(false);
     }
@@ -511,230 +562,84 @@ export default function ProfiloScreen() {
         </Animated.View>
 
         {/* ── NAME ── */}
+        {/* The mood week. First thing in Settings, above even usage — it is the
+            only screen that answers "is this actually helping me?" */}
+        <GroupHeading label={t('HOW YOU ARE')} first />
         <Section index={0}>
           <View style={cardStyle}>
             <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
             <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
             <View style={styles.cardPad}>
-              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>YOUR NAME</Text>
-              {editingName ? (
-                <View style={styles.inlineRow}>
-                  <TextInput
-                    style={[styles.inlineInput, { color: colors.text, borderColor: colors.glassBorder }]}
-                    value={nameInput}
-                    onChangeText={setNameInput}
-                    placeholder="your name..."
-                    placeholderTextColor={colors.textDim}
-                    autoFocus
-                    returnKeyType="done"
-                    onSubmitEditing={saveName}
-                  />
-                  <TouchableOpacity
-                    style={[styles.smallBtn, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder }]}
-                    onPress={saveName}
-                  >
-                    <Text style={[styles.smallBtnText, { color: colors.cyan }]}>✓</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity onPress={() => { setNameInput(name); setEditingName(true); }}>
-                  <Text style={[styles.nameDisplay, { color: name ? colors.text : colors.textDim }]}>
-                    {name || 'tap to set your name'}
+              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>{t('THIS WEEK')}</Text>
+              <View style={{ marginTop: 12 }}>
+                <MoodWeek rows={moodRows} />
+              </View>
+            </View>
+          </View>
+        </Section>
+
+        <GroupHeading label={t('YOUR PLAN')} />
+        <Section index={0}>
+          <View style={cardStyle}>
+            <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
+            <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
+            <View style={styles.cardPad}>
+              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>{t('SYMPONIA · USAGE')}</Text>
+
+              {/* SUBSCRIBER: a usage window, in the shape Claude reports its own.
+                  Never a balance. The bar is informational — it says "here is how
+                  much you've leaned on this", not "here is what you have left". */}
+              {isSubscribed && usage?.subscribed && (
+                <View style={{ marginTop: 6 }}>
+                  <View style={[styles.tokenTrack, { marginBottom: 6 }]}>
+                    <View style={[styles.tokenFill, {
+                      width: `${Math.min(usage.used / usage.limit, 1) * 100}%`,
+                      backgroundColor: colors.cyan + 'CC',
+                    }]} />
+                  </View>
+                  <Text style={[styles.tokenBarLabel, { color: colors.cyan + 'AA' }]}>
+                    {t('{n} reflections this week', { n: usage.used })}
                   </Text>
-                </TouchableOpacity>
+                  <Text style={[styles.tokenPackNote, { color: colors.textDim, marginTop: 6 }]}>
+                    {t('Unlimited · Archetype · My Day · Conversation')}
+                  </Text>
+                  {usage.renewsAt && (
+                    <Text style={[styles.tokenPackNote, { color: colors.textDim, marginTop: 2 }]}>
+                      {t('Renews {date}', {
+                        date: new Date(usage.renewsAt).toLocaleDateString(getLocale(), {
+                          day: 'numeric', month: 'long',
+                        }),
+                      })}
+                    </Text>
+                  )}
+                </View>
+              )}
+
+              {/* TRIAL: the one place a count still honestly belongs. */}
+              {!isSubscribed && (
+                <View style={{ marginTop: 6 }}>
+                  <View style={[styles.tokenTrack, { marginBottom: 6 }]}>
+                    <View style={[styles.tokenFill, {
+                      width: `${Math.min(tokens / TRIAL_TOKENS, 1) * 100}%`,
+                      backgroundColor: tokens <= 3 ? '#e07070CC' : colors.cyan + 'CC',
+                    }]} />
+                  </View>
+                  <Text style={[styles.tokenBarLabel, { color: tokens <= 3 ? '#e07070AA' : colors.cyan + 'AA' }]}>
+                    {tokens === 1 ? t('1 FREE REFLECTION LEFT') : t('{n} FREE REFLECTIONS LEFT', { n: tokens })}
+                  </Text>
+                </View>
+              )}
+
+              {!isSubscribed && (
+                <Text style={[styles.tokenPackNote, { color: colors.textDim, marginTop: 10 }]}>
+                  {t('Subscribe to reflect as often as you need.')}
+                </Text>
               )}
             </View>
           </View>
         </Section>
 
-        {/* ── GENDER ── */}
         <Section index={1}>
-          <View style={cardStyle}>
-            <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
-            <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
-            <View style={[styles.cardPad, styles.rowBetween]}>
-              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>PRONOUNS</Text>
-              <TouchableOpacity
-                onPress={() => router.navigate('/onboarding')}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.genderValue, { color: gender ? colors.text : colors.textDim }]}>
-                  {gender ? (GENDER_LABELS[gender] ?? gender) : 'not set'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Section>
-
-        {/* ── YOUR ARCHETYPES ── */}
-        {userAnimals.length > 0 && (
-          <Section index={2}>
-            <View ref={archRef} collapsable={false} style={cardStyle}>
-              <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
-              <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
-              <View style={styles.cardPad}>
-                <Text style={[styles.sectionLabel, { color: colors.textDim }]}>YOUR ARCHETYPES</Text>
-                <Text style={[styles.sectionSub, { color: colors.textDim, marginBottom: 6 }]}>
-                  the seven that shape how Symponia reflects with you
-                </Text>
-                {userAnimals.map((animal, i) => {
-                  const isShadow = i === 6;
-                  const emoji = ANIMAL_EMOJI[animal] ?? ANIMAL_EMOJI[animal.charAt(0).toUpperCase() + animal.slice(1).toLowerCase()] ?? '🐾';
-                  return (
-                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 7 }}>
-                      <Text style={{ fontSize: 22 }}>{emoji}</Text>
-                      <Text style={{ flex: 1, fontSize: 14, fontFamily: FONT, fontWeight: '400', color: colors.text }}>
-                        {animal.charAt(0).toUpperCase() + animal.slice(1).toLowerCase()}
-                      </Text>
-                      <Text style={{ fontSize: 11, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.5, color: isShadow ? colors.violet : colors.textDim }}>
-                        {ZOO_LABELS[i]}
-                      </Text>
-                    </View>
-                  );
-                })}
-                <TouchableOpacity
-                  onPress={() => router.navigate('/archetype')}
-                  activeOpacity={0.7}
-                  style={[styles.zooUpdateBtn, { marginTop: 12 }]}
-                >
-                  <Text style={[styles.zooUpdateText, { color: colors.cyan }]}>view your archetype →</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => router.navigate('/update-animals')}
-                  activeOpacity={0.7}
-                  style={[styles.zooUpdateBtn, { marginTop: 6 }]}
-                >
-                  <Text style={[styles.zooUpdateText, { color: colors.textSub }]}>update animals →</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Section>
-        )}
-
-        {/* ── RESONANCE FREQUENCY ── */}
-        <Section index={3}>
-          <View style={cardStyle}>
-            <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
-            <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
-            <View style={styles.cardPad}>
-              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>RESONANCE FREQUENCY</Text>
-              <Text style={[styles.sectionSub, { color: colors.textDim }]}>
-                how shall symponia speak to you
-              </Text>
-              <View style={styles.freqList}>
-                {([ 'Deeply Emotional', 'Intellectual', 'Quiet' ] as Frequency[]).map((f) => {
-                  const active = f === frequency;
-                  const fc = FREQ_CONFIG[f];
-                  return (
-                    <TouchableOpacity
-                      key={f}
-                      style={[
-                        styles.freqOption,
-                        { borderColor: active ? colors.cyanBorder : colors.glassBorder },
-                        active && { backgroundColor: colors.cyanDim },
-                      ]}
-                      onPress={() => selectFrequency(f)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.freqOptionTop}>
-                        <View style={[styles.radioOuter, { borderColor: active ? colors.cyan : colors.textDim }]}>
-                          {active && <View style={[styles.radioInner, { backgroundColor: colors.cyan }]} />}
-                        </View>
-                        <Text style={[styles.freqOptionLabel, { color: active ? colors.text : colors.textSub }]}>
-                          {fc.label}
-                        </Text>
-                      </View>
-                      <Text style={[styles.freqOptionDesc, { color: active ? colors.textSub : colors.textDim }]}>
-                        {fc.desc}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          </View>
-        </Section>
-
-        {/* ── APPEARANCE ── */}
-        <Section index={3}>
-          <View style={cardStyle}>
-            <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
-            <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
-            <View style={styles.cardPad}>
-              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>APPEARANCE</Text>
-              <View style={styles.themeRow}>
-                {THEMES.map((theme) => {
-                  const active = themeId === theme.id;
-                  return (
-                    <TouchableOpacity
-                      key={theme.id}
-                      style={styles.themeSwatch}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setTheme(theme.id as ThemeId);
-                      }}
-                      activeOpacity={0.75}
-                    >
-                      <View style={[styles.swatchCircle, active && styles.swatchActive]}>
-                        <View style={[styles.swatchBg, { backgroundColor: theme.bgColor }]} />
-                        <View style={[styles.swatchAccent, { backgroundColor: theme.accentColor }]} />
-                        {active && (
-                          <View style={styles.swatchDot} />
-                        )}
-                      </View>
-                      <Text style={[styles.swatchLabel, { color: active ? colors.cyan : colors.textDim }]}>
-                        {theme.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          </View>
-        </Section>
-
-        {/* ── SENSE TOKENS ── */}
-        <Section index={4}>
-          <View style={cardStyle}>
-            <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
-            <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
-            <View style={styles.cardPad}>
-              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>SYMPONIA · REFLECTIONS</Text>
-              {/* Token bar */}
-              <View style={[styles.tokenTrack, { marginTop: 6, marginBottom: 4 }]}>
-                <View style={[styles.tokenFill, { width: `${Math.min(tokens / 50, 1) * 100}%`, backgroundColor: tokens <= 3 ? '#e07070CC' : colors.cyan + 'CC' }]} />
-              </View>
-              <View style={{ marginBottom: 14 }}>
-                <Text style={[styles.tokenBarLabel, { color: tokens <= 3 ? '#e07070AA' : colors.cyan + 'AA' }]}>
-                  {tokens} REFLECTION{tokens !== 1 ? 'S' : ''} REMAINING
-                </Text>
-                <Text style={[styles.tokenBarLabel, { color: colors.textDim, marginTop: 3 }]}>
-                  1 REFLECTION = 1 RESPONSE
-                </Text>
-              </View>
-              {isSubscribed ? (
-                <View style={{ marginTop: 4, gap: 4 }}>
-                  <Text style={[styles.tokenPackNote, { color: colors.textSub }]}>
-                    {'350 reflections per month'}
-                  </Text>
-                  <Text style={[styles.tokenPackNote, { color: colors.textDim }]}>
-                    {'Archetype · My Day · Conversation'}
-                  </Text>
-                  <Text style={[styles.tokenPackNote, { color: colors.textDim }]}>
-                    {'Renews monthly with your subscription'}
-                  </Text>
-                </View>
-              ) : (
-                <Text style={[styles.tokenPackNote, { color: colors.textDim, marginTop: 4 }]}>
-                  Subscribe to Symponia Monthly for 350 reflections every month.
-                </Text>
-              )}
-            </View>
-          </View>
-        </Section>
-
-        {/* ── SUBSCRIPTION ── */}
-        <Section index={5}>
           <View style={cardStyle}>
             <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
             <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
@@ -756,7 +661,11 @@ export default function ProfiloScreen() {
               {/* Expiry */}
               {isSubscribed && subscriptionExpiry ? (
                 <Text style={[styles.subExpiry, { color: colors.textDim, marginBottom: 16 }]}>
-                  {'renews · '}{new Date(subscriptionExpiry).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  {t('renews · {date}', {
+                    date: new Date(subscriptionExpiry).toLocaleDateString(getLocale(), {
+                      day: 'numeric', month: 'long', year: 'numeric',
+                    }),
+                  })}
                 </Text>
               ) : null}
 
@@ -766,13 +675,18 @@ export default function ProfiloScreen() {
                 const loading = !pricesError && !storeInfo;
                 const priceLabel = pricesError ? 'tap to retry' : (storeInfo?.localizedPrice || '…');
                 const priceForLegalText = pricesError ? '—' : (storeInfo?.localizedPrice || '…');
+                const isWeekly = sub.id.endsWith('.weekly');
+                // Trial comes from the STORE, never hardcoded. If the intro offer
+                // isn't configured, this is null and we quietly show the price —
+                // we never advertise a trial Apple wouldn't actually grant.
+                const trialDays = storeInfo?.trialDays ?? null;
                 return (
                   <React.Fragment key={sub.id}>
                     <Text style={[styles.subDescription, { color: colors.textSub }]}>
-                      {'Symponia Monthly'}
+                      {t(sub.nameKey)}
                     </Text>
                     <Text style={[styles.subFeatureList, { color: colors.textDim }]}>
-                      {'350 reflection sessions every month, across Archetype, My Day, and Conversation.\nAuto-renews until cancelled.'}
+                      {t(sub.pitchKey)}
                     </Text>
                     <TouchableOpacity
                       style={[styles.subBtn, { borderColor: isPurchasingSub ? colors.glassBorder : colors.cyan, backgroundColor: isPurchasingSub ? 'transparent' : colors.cyan + '22', marginBottom: 4 }]}
@@ -781,11 +695,22 @@ export default function ProfiloScreen() {
                       activeOpacity={0.75}
                     >
                       <Text style={[styles.subBtnText, { color: isPurchasingSub ? colors.textDim : colors.cyan }]}>
-                        {isPurchasingSub ? 'processing…' : `subscribe — ${priceLabel}/month`}
+                        {isPurchasingSub
+                          ? t('processing…')
+                          : trialDays
+                            ? t('Start {n} days free', { n: trialDays })
+                            : t(isWeekly ? 'subscribe — {price}/week' : 'subscribe — {price}/month', { price: priceLabel })}
                       </Text>
                     </TouchableOpacity>
+                    {/* Apple requires the real price and renewal terms next to the
+                        purchase control — the trial headline does not replace them. */}
                     <Text style={[styles.subRenewalNote, { color: colors.textDim }]}>
-                      {'auto-renews monthly · cancel anytime in App Store Settings'}
+                      {trialDays
+                        ? t('Then {price} / {period}. Cancel anytime before it ends and you are not charged.', {
+                            price: priceForLegalText,
+                            period: t(isWeekly ? 'week' : 'month'),
+                          })
+                        : t(sub.shortRenewKey)}
                     </Text>
                     {/* Legal links adjacent to purchase button — required by Apple */}
                     <View style={[styles.subLegalInline]}>
@@ -845,31 +770,230 @@ export default function ProfiloScreen() {
           </View>
         </Section>
 
-        {/* ── MEMORY ── */}
+        <GroupHeading label={t('YOU')} />
+
+        <Section index={2}>
+          <View style={cardStyle}>
+            <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
+            <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
+            <View style={styles.cardPad}>
+              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>YOUR NAME</Text>
+              {editingName ? (
+                <View style={styles.inlineRow}>
+                  <TextInput
+                    style={[styles.inlineInput, { color: colors.text, borderColor: colors.glassBorder }]}
+                    value={nameInput}
+                    onChangeText={setNameInput}
+                    placeholder={t("your name...")}
+                    placeholderTextColor={colors.textDim}
+                    autoFocus
+                    returnKeyType="done"
+                    onSubmitEditing={saveName}
+                  />
+                  <TouchableOpacity
+                    style={[styles.smallBtn, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder }]}
+                    onPress={saveName}
+                  >
+                    <Text style={[styles.smallBtnText, { color: colors.cyan }]}>✓</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity onPress={() => { setNameInput(name); setEditingName(true); }}>
+                  <Text style={[styles.nameDisplay, { color: name ? colors.text : colors.textDim }]}>
+                    {name || 'tap to set your name'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </Section>
+
+        <Section index={3}>
+          <View style={cardStyle}>
+            <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
+            <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
+            <View style={[styles.cardPad, styles.rowBetween]}>
+              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>PRONOUNS</Text>
+              <TouchableOpacity
+                onPress={() => router.navigate('/onboarding')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.genderValue, { color: gender ? colors.text : colors.textDim }]}>
+                  {gender ? (GENDER_LABELS[gender] ?? gender) : 'not set'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Section>
+
+          <Section index={4}>
+            <View ref={archRef} collapsable={false} style={cardStyle}>
+              <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
+              <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
+              <View style={styles.cardPad}>
+                <Text style={[styles.sectionLabel, { color: colors.textDim }]}>YOUR ARCHETYPES</Text>
+                <Text style={[styles.sectionSub, { color: colors.textDim, marginBottom: 6 }]}>
+                  the seven that shape how Symponia reflects with you
+                </Text>
+                {userAnimals.map((animal, i) => {
+                  const isShadow = i === 6;
+                  const emoji = ANIMAL_EMOJI[animal] ?? ANIMAL_EMOJI[animal.charAt(0).toUpperCase() + animal.slice(1).toLowerCase()] ?? '🐾';
+                  return (
+                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 7 }}>
+                      <Text style={{ fontSize: 22 }}>{emoji}</Text>
+                      <Text style={{ flex: 1, fontSize: 14, fontFamily: FONT, fontWeight: '400', color: colors.text }}>
+                        {animal.charAt(0).toUpperCase() + animal.slice(1).toLowerCase()}
+                      </Text>
+                      <Text style={{ fontSize: 11, fontFamily: FONT, fontWeight: '400', letterSpacing: 0.5, color: isShadow ? colors.violet : colors.textDim }}>
+                        {ZOO_LABELS[i]}
+                      </Text>
+                    </View>
+                  );
+                })}
+                <TouchableOpacity
+                  onPress={() => router.navigate('/archetype')}
+                  activeOpacity={0.7}
+                  style={[styles.zooUpdateBtn, { marginTop: 12 }]}
+                >
+                  <Text style={[styles.zooUpdateText, { color: colors.cyan }]}>view your archetype →</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => router.navigate('/update-animals')}
+                  activeOpacity={0.7}
+                  style={[styles.zooUpdateBtn, { marginTop: 6 }]}
+                >
+                  <Text style={[styles.zooUpdateText, { color: colors.textSub }]}>update animals →</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Section>
+
         <Section index={5}>
           <View style={cardStyle}>
             <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
             <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
             <View style={styles.cardPad}>
-              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>MEMORY</Text>
+              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>RESONANCE FREQUENCY</Text>
               <Text style={[styles.sectionSub, { color: colors.textDim }]}>
-                let Symponia hold the thread of your journey — only you can ever see your reflections
+                how shall symponia speak to you
               </Text>
-              <View style={[styles.rowBetween, styles.notifRow]}>
-                <Text style={[styles.settingLabel, { color: colors.textSub }]}>remember me</Text>
-                <Toggle value={memoryOn} onValueChange={toggleMemory} />
+              <View style={styles.freqList}>
+                {([ 'Deeply Emotional', 'Intellectual', 'Quiet' ] as Frequency[]).map((f) => {
+                  const active = f === frequency;
+                  const fc = FREQ_CONFIG[f];
+                  return (
+                    <TouchableOpacity
+                      key={f}
+                      style={[
+                        styles.freqOption,
+                        { borderColor: active ? colors.cyanBorder : colors.glassBorder },
+                        active && { backgroundColor: colors.cyanDim },
+                      ]}
+                      onPress={() => selectFrequency(f)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.freqOptionTop}>
+                        <View style={[styles.radioOuter, { borderColor: active ? colors.cyan : colors.textDim }]}>
+                          {active && <View style={[styles.radioInner, { backgroundColor: colors.cyan }]} />}
+                        </View>
+                        <Text style={[styles.freqOptionLabel, { color: active ? colors.text : colors.textSub }]}>
+                          {fc.label}
+                        </Text>
+                      </View>
+                      <Text style={[styles.freqOptionDesc, { color: active ? colors.textSub : colors.textDim }]}>
+                        {fc.desc}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-              <Text style={[styles.sectionSub, { color: colors.textDim }]}>
-                {memoryOn
-                  ? 'on · private to you, encrypted, never sold or used to train AI.'
-                  : 'off · nothing leaves your device beyond each live reply.'}
-              </Text>
             </View>
           </View>
         </Section>
 
-        {/* ── REFLECTIONS (notification schedule) ── */}
         <Section index={6}>
+          <View style={cardStyle}>
+            <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
+            <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
+            <View style={styles.cardPad}>
+              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>LANGUAGE</Text>
+              <Text style={[styles.sectionSub, { color: colors.textDim }]}>
+                Symponia speaks with you in this language
+              </Text>
+              <View style={styles.langGrid}>
+                {LANGUAGES.map((l) => {
+                  const active = lang === l.code;
+                  return (
+                    <TouchableOpacity
+                      key={l.code}
+                      style={[
+                        styles.langBubble,
+                        { borderColor: active ? colors.cyanBorder : colors.glassBorder },
+                        active && { backgroundColor: colors.cyanDim },
+                      ]}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setLangState(l.code);
+                        saveLanguage(l.code);
+                        // Weekly/monthly bodies are baked in at schedule time, so a
+                        // language change must re-cut them or they fire in the old one.
+                        scheduleWeekly(notifWeekly).catch(() => {});
+                        scheduleMonthly(notifMonthly).catch(() => {});
+                      }}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={styles.langFlag}>{l.flag}</Text>
+                      <Text style={[styles.langLabel, { color: active ? colors.text : colors.textSub }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+                        {l.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+        </Section>
+
+        <GroupHeading label={t('PREFERENCES')} />
+
+        <Section index={7}>
+          <View style={cardStyle}>
+            <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
+            <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
+            <View style={styles.cardPad}>
+              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>APPEARANCE</Text>
+              <View style={styles.themeRow}>
+                {THEMES.map((theme) => {
+                  const active = themeId === theme.id;
+                  return (
+                    <TouchableOpacity
+                      key={theme.id}
+                      style={styles.themeSwatch}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setTheme(theme.id as ThemeId);
+                      }}
+                      activeOpacity={0.75}
+                    >
+                      <View style={[styles.swatchCircle, active && styles.swatchActive]}>
+                        <View style={[styles.swatchBg, { backgroundColor: theme.bgColor }]} />
+                        <View style={[styles.swatchAccent, { backgroundColor: theme.accentColor }]} />
+                        {active && (
+                          <View style={styles.swatchDot} />
+                        )}
+                      </View>
+                      <Text style={[styles.swatchLabel, { color: active ? colors.cyan : colors.textDim }]}>
+                        {theme.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+        </Section>
+
+        <Section index={8}>
           <View style={cardStyle}>
             <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
             <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
@@ -902,8 +1026,166 @@ export default function ProfiloScreen() {
           </View>
         </Section>
 
-        {/* ── ABOUT ── */}
-        <Section index={7}>
+        <GroupHeading label={t('PRIVACY')} />
+
+        <Section index={9}>
+          <View style={cardStyle}>
+            <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
+            <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
+            <View style={styles.cardPad}>
+              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>MEMORY</Text>
+              <Text style={[styles.sectionSub, { color: colors.textDim }]}>
+                let Symponia hold the thread of your journey — only you can ever see your reflections
+              </Text>
+              <View style={[styles.rowBetween, styles.notifRow]}>
+                <Text style={[styles.settingLabel, { color: colors.textSub }]}>remember me</Text>
+                <Toggle value={memoryOn} onValueChange={toggleMemory} />
+              </View>
+              <Text style={[styles.sectionSub, { color: colors.textDim }]}>
+                {memoryOn
+                  ? 'on · private to you, encrypted, never sold or used to train AI.'
+                  : 'off · nothing leaves your device beyond each live reply.'}
+              </Text>
+            </View>
+          </View>
+        </Section>
+
+        <GroupHeading label={t('ACCOUNT')} />
+
+        <Section index={10}>
+          <View style={cardStyle}>
+            <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
+            <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
+            <View style={styles.cardPad}>
+              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>ACCOUNT</Text>
+              {userEmail ? (
+                <Text
+                  style={[styles.sectionSub, { color: colors.textSub }]}
+                  numberOfLines={1}
+                  ellipsizeMode="middle"
+                >
+                  {t('signed in as {email}', { email: userEmail })}
+                </Text>
+              ) : null}
+              <Text style={[styles.sectionSub, { color: colors.textDim }]}>
+                erase your saved conversations with Symponia
+              </Text>
+              <TouchableOpacity
+                style={styles.linkRow}
+                onPress={() => {
+                  Alert.alert(
+                    t('Clear all conversations?'),
+                    t('This removes all your saved chats from this device and your account. Your profile and animals are untouched.'),
+                    [
+                      { text: t('cancel'), style: 'cancel' },
+                      {
+                        text: t('clear all'),
+                        style: 'destructive',
+                        onPress: async () => {
+                          await clearAllConversations();
+                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        },
+                      },
+                    ],
+                  );
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.linkText, { color: '#e07070' }]}>clear all conversations</Text>
+                <Text style={[styles.linkChevron, { color: colors.textDim }]}>›</Text>
+              </TouchableOpacity>
+
+              <AIConsentRow colors={colors} />
+
+              <TouchableOpacity
+                style={[styles.linkRow, { marginTop: 4 }]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  Alert.alert(
+                    t('Sign Out'),
+                    t('You will need to sign in again to access your profile.'),
+                    [
+                      { text: t('cancel'), style: 'cancel' },
+                      {
+                        text: t('sign out'),
+                        style: 'destructive',
+                        onPress: async () => {
+                          await AsyncStorage.multiRemove([
+                            'symponia_name',
+                            'symponia_gender',
+                            'symponia_frequency',
+                            'symponia_notif_daily',
+                            'symponia_notif_weekly',
+                            'symponia_notif_monthly',
+                            'symponia_tokens',
+                            'symponia_animals',
+                            'symponia_subscription_expires',
+                            'symponia_subscribed',
+                            'symponia_push_token',
+                            'symponia_user_id',
+                            'symponia_last_reset_seen',
+                            'symponia_ai_consent',
+                            'symponia_active_mode',
+                          ]);
+                          await supabase.auth.signOut();
+                        },
+                      },
+                    ],
+                  );
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.linkText, { color: colors.textSub }]}>sign out</Text>
+                <Text style={[styles.linkChevron, { color: colors.textDim }]}>›</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.linkRow, { marginTop: 4 }]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                  Alert.alert(
+                    t('Delete Account'),
+                    t('This will permanently delete your account and all data. This cannot be undone.'),
+                    [
+                      { text: t('cancel'), style: 'cancel' },
+                      {
+                        text: t('delete account'),
+                        style: 'destructive',
+                        onPress: async () => {
+                          try {
+                            const { error } = await supabase.functions.invoke('delete-account', {
+                              method: 'POST',
+                              body: { confirm: true },
+                            });
+                            if (error) {
+                              // Extract real error body from FunctionsHttpError
+                              const body = error.context
+                                ? await error.context.text().catch(() => '')
+                                : '';
+                              throw new Error(body || error.message);
+                            }
+                            // Clear all local data then sign out
+                            await AsyncStorage.clear();
+                            await supabase.auth.signOut().catch(() => {});
+                            router.replace('/signin');
+                          } catch (e: any) {
+                            Alert.alert(t('Error'), `${e?.message ?? 'unknown error'}`);
+                          }
+                        },
+                      },
+                    ],
+                  );
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.linkText, { color: '#e07070' }]}>delete account</Text>
+                <Text style={[styles.linkChevron, { color: colors.textDim }]}>›</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Section>
+
+        <Section index={11}>
           <View style={cardStyle}>
             <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
             <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
@@ -949,147 +1231,12 @@ export default function ProfiloScreen() {
           </View>
         </Section>
 
-        {/* ── DATA & ACCOUNT ── */}
-        <Section index={8}>
-          <View style={cardStyle}>
-            <View style={[styles.cardBg, { backgroundColor: cardBg }]} />
-            <View style={[styles.cardBorderTop, { backgroundColor: colors.glassBorderStrong }]} />
-            <View style={styles.cardPad}>
-              <Text style={[styles.sectionLabel, { color: colors.textDim }]}>ACCOUNT</Text>
-              {userEmail ? (
-                <Text
-                  style={[styles.sectionSub, { color: colors.textSub }]}
-                  numberOfLines={1}
-                  ellipsizeMode="middle"
-                >
-                  signed in as {userEmail}
-                </Text>
-              ) : null}
-              <Text style={[styles.sectionSub, { color: colors.textDim }]}>
-                erase your saved conversations with Symponia
-              </Text>
-              <TouchableOpacity
-                style={styles.linkRow}
-                onPress={() => {
-                  Alert.alert(
-                    'Clear all conversations?',
-                    'This removes all your saved chats from this device and your account. Your profile and animals are untouched.',
-                    [
-                      { text: 'cancel', style: 'cancel' },
-                      {
-                        text: 'clear all',
-                        style: 'destructive',
-                        onPress: async () => {
-                          await clearAllConversations();
-                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                        },
-                      },
-                    ],
-                  );
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.linkText, { color: '#e07070' }]}>clear all conversations</Text>
-                <Text style={[styles.linkChevron, { color: colors.textDim }]}>›</Text>
-              </TouchableOpacity>
-
-              <AIConsentRow colors={colors} />
-
-              <TouchableOpacity
-                style={[styles.linkRow, { marginTop: 4 }]}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  Alert.alert(
-                    'Sign Out',
-                    'You will need to sign in again to access your profile.',
-                    [
-                      { text: 'cancel', style: 'cancel' },
-                      {
-                        text: 'sign out',
-                        style: 'destructive',
-                        onPress: async () => {
-                          await AsyncStorage.multiRemove([
-                            'symponia_name',
-                            'symponia_gender',
-                            'symponia_frequency',
-                            'symponia_notif_daily',
-                            'symponia_notif_weekly',
-                            'symponia_notif_monthly',
-                            'symponia_tokens',
-                            'symponia_animals',
-                            'symponia_subscription_expires',
-                            'symponia_subscribed',
-                            'symponia_push_token',
-                            'symponia_user_id',
-                            'symponia_last_reset_seen',
-                            'symponia_ai_consent',
-                            'symponia_active_mode',
-                          ]);
-                          await supabase.auth.signOut();
-                        },
-                      },
-                    ],
-                  );
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.linkText, { color: colors.textSub }]}>sign out</Text>
-                <Text style={[styles.linkChevron, { color: colors.textDim }]}>›</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.linkRow, { marginTop: 4 }]}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-                  Alert.alert(
-                    'Delete Account',
-                    'This will permanently delete your account and all data. This cannot be undone.',
-                    [
-                      { text: 'cancel', style: 'cancel' },
-                      {
-                        text: 'delete account',
-                        style: 'destructive',
-                        onPress: async () => {
-                          try {
-                            const { error } = await supabase.functions.invoke('delete-account', {
-                              method: 'POST',
-                              body: { confirm: true },
-                            });
-                            if (error) {
-                              // Extract real error body from FunctionsHttpError
-                              const body = error.context
-                                ? await error.context.text().catch(() => '')
-                                : '';
-                              throw new Error(body || error.message);
-                            }
-                            // Clear all local data then sign out
-                            await AsyncStorage.clear();
-                            await supabase.auth.signOut().catch(() => {});
-                            router.replace('/signin');
-                          } catch (e: any) {
-                            Alert.alert('Error', `${e?.message ?? 'unknown error'}`);
-                          }
-                        },
-                      },
-                    ],
-                  );
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.linkText, { color: '#e07070' }]}>delete account</Text>
-                <Text style={[styles.linkChevron, { color: colors.textDim }]}>›</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Section>
-
-        {/* ── SHOW TIPS AGAIN ── */}
-        <Section index={9}>
+        <Section index={12}>
           <TouchableOpacity
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               resetAllTips().then(() => {
-                Alert.alert('Tips reset', 'The guided tips will show again next time you open each screen.', [{ text: 'OK' }]);
+                Alert.alert(t('Tips reset'), t('The guided tips will show again next time you open each screen.'), [{ text: t('OK') }]);
               });
             }}
             activeOpacity={0.7}
@@ -1154,6 +1301,28 @@ const styles = StyleSheet.create({
   cardBorderTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 0.5 },
   cardPad: { padding: 18 },
 
+  langGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  langBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 13,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  langFlag: {
+    fontSize: 16,
+  },
+  langLabel: {
+    fontSize: 13,
+    letterSpacing: 0.2,
+  },
   sectionLabel: {
     fontSize: 9,
     letterSpacing: 2.5,

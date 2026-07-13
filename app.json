@@ -2,7 +2,7 @@
   "expo": {
     "name": "Symponia",
     "slug": "symponia",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "portrait",
     "scheme": "symponia",
     "icon": "./Assets/images/icon.png",
@@ -17,6 +17,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.symponia.app",
       "buildNumber": "31",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSUserNotificationsUsageDescription": "Symponia would like to send you a daily reflection — a short, centering thought for your morning.",
@@ -45,13 +46,22 @@
           "icon": "./Assets/images/icon.png",
           "color": "#0C1014"
         }
+      ],
+      "expo-apple-authentication",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.51163397268-8cu8dbbqk3pjblrvm7lqiu12j9e4kpm6"
+        }
       ]
     ],
     "extra": {
       "router": {},
       "eas": {
         "projectId": "f8dcbb94-7850-4283-9bce-550979a54dbf"
-      }
+      },
+      "googleIosClientId": "51163397268-8cu8dbbqk3pjblrvm7lqiu12j9e4kpm6.apps.googleusercontent.com",
+      "googleWebClientId": "51163397268-sfj41f6r88ss5niljntq1s2116b1stat.apps.googleusercontent.com"
     }
   }
 }

@@ -1,4 +1,5 @@
 import { useTheme } from '@/constants/ThemeContext';
+import { t } from '@/constants/i18n';
 import {
   SUBSCRIPTION_PRODUCTS,
   fetchStoreSubscriptions,
@@ -13,28 +14,24 @@ import {
 import { syncTokens, checkSubscription } from '@/services/supabaseTokens';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Linking,
   Platform,
   ScrollView,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Text } from '@/components/Text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 const FONT = Platform.select({ ios: 'Helvetica Neue', android: 'Roboto', default: 'System' });
 
-// ── Reflection counts per subscription ────────────────────────────────────────
-
-const SUB_META = {
-  reflections: 350,
-  approxMessages: 700,
-};
+// (Reflection quotas removed — a subscription is access, not a bucket. Usage is
+//  governed by the fair-use window in the oracle and never counted at the user.)
 
 // ── Paywall Screen ─────────────────────────────────────────────────────────────
 
@@ -42,11 +39,23 @@ export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
 
-  const [subProducts, setSubProducts]     = useState<{ productId: string; localizedPrice: string }[]>([]);
+  // intro=1 -> shown straight after onboarding. Two differences:
+  //   1. It leads with the free trial, not the price.
+  //   2. Dismissing enters the app rather than going "back" to onboarding,
+  //      which no longer exists in the stack.
+  const { intro } = useLocalSearchParams<{ intro?: string }>();
+  const isIntro = intro === '1';
+
+  const [subProducts, setSubProducts]     = useState<{ productId: string; localizedPrice: string; trialDays: number | null }[]>([]);
   const [pricesError, setPricesError]     = useState(false);
   const [isPurchasing, setIsPurchasing]   = useState(false);
   const [isRestoring, setIsRestoring]     = useState(false);
   const [notice, setNotice]               = useState('');
+
+  const dismiss = useCallback(() => {
+    if (isIntro) router.replace('/(tabs)');
+    else router.back();
+  }, [isIntro]);
 
   const loadPrices = useCallback(() => {
     setPricesError(false);
@@ -58,7 +67,7 @@ export default function PaywallScreen() {
       .then(() => fetchStoreSubscriptions())
       .then((subs) => {
         clearTimeout(timeoutId);
-        setSubProducts(subs.map((p) => ({ productId: p.productId, localizedPrice: p.localizedPrice })));
+        setSubProducts(subs);   // keep trialDays — mapping it away is how the trial silently vanished
       })
       .catch(() => { clearTimeout(timeoutId); setPricesError(true); });
   }, []);
@@ -75,10 +84,11 @@ export default function PaywallScreen() {
     removePurchaseListeners = setupPurchaseListeners(
       async (purchase: ProductPurchase) => {
         setIsPurchasing(false);
-        if (SUBSCRIPTION_PRODUCTS.some((p) => p.id === purchase.productId)) {
-          setNotice('Symponia Monthly activated.');
+        const boughtSub = SUBSCRIPTION_PRODUCTS.find((p) => p.id === purchase.productId);
+        if (boughtSub) {
+          setNotice(t(boughtSub.activatedKey));
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          setTimeout(() => router.back(), 1400);
+          setTimeout(dismiss, 1400);
         }
       },
       (err) => {
@@ -149,8 +159,10 @@ export default function PaywallScreen() {
     <View style={[styles.screen, { backgroundColor: colors.bg }]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 12, borderBottomColor: colors.glassBorder }]}>
-        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.65} hitSlop={12}>
-          <Text style={[styles.back, { color: colors.textDim }]}>← back</Text>
+        <TouchableOpacity onPress={dismiss} activeOpacity={0.65} hitSlop={12}>
+          <Text style={[styles.back, { color: colors.textDim }]}>
+            {isIntro ? t('not now') : t('← back')}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -179,17 +191,35 @@ export default function PaywallScreen() {
                 const priceLabel = pricesError ? 'tap to retry' : (storeInfo?.localizedPrice || '…');
                 const priceForLegalText = pricesError ? '—' : (storeInfo?.localizedPrice || '…');
 
+                const trialDays = storeInfo?.trialDays ?? null;
+                const isWeekly = sub.id.endsWith('.weekly');
+
                 return (
                   <React.Fragment key={sub.id}>
-                    <Text style={[styles.planTitle, { color: colors.cyan }]}>
-                      {`Symponia Monthly — ${priceForLegalText} / month`}
-                    </Text>
+                    {/* Lead with the trial when Apple actually grants one. If the
+                        intro offer isn't configured in ASC, trialDays is null and
+                        this simply doesn't render — we never promise a trial that
+                        doesn't exist. */}
+                    {trialDays ? (
+                      <Text style={[styles.planTitle, { color: colors.cyan }]}>
+                        {t('{n} days free', { n: trialDays })}
+                      </Text>
+                    ) : (
+                      <Text style={[styles.planTitle, { color: colors.cyan }]}>
+                        {t(sub.titleKey, { price: priceForLegalText })}
+                      </Text>
+                    )}
 
                     <Text style={[styles.planBody, { color: colors.textSub }]}>
-                      350 reflection sessions across all three modes — Archetype, My Day, and Conversation.
+                      {t(sub.bodyKey)}
                     </Text>
                     <Text style={[styles.planBody, { color: colors.textDim }]}>
-                      Auto-renews every month until cancelled. Cancel anytime in your Apple ID settings.
+                      {trialDays
+                        ? t('Then {price} / {period}. Cancel anytime before it ends and you are not charged.', {
+                            price: priceForLegalText,
+                            period: t(isWeekly ? 'week' : 'month'),
+                          })
+                        : t(sub.renewKey)}
                     </Text>
 
                     <TouchableOpacity
@@ -205,7 +235,11 @@ export default function PaywallScreen() {
                       activeOpacity={0.75}
                     >
                       <Text style={[styles.primaryBtnText, { color: isPurchasing ? colors.textDim : colors.cyan }]}>
-                        {isPurchasing ? 'processing…' : `Subscribe — ${priceLabel}/month`}
+                        {isPurchasing
+                          ? t('processing…')
+                          : trialDays
+                            ? t('Start {n} days free', { n: trialDays })
+                            : t(isWeekly ? 'subscribe — {price}/week' : 'subscribe — {price}/month', { price: priceLabel })}
                       </Text>
                     </TouchableOpacity>
 
@@ -253,7 +287,7 @@ export default function PaywallScreen() {
 
         {/* Footer legal */}
         <Text style={[styles.footerLegal, { color: colors.textDim }]}>
-          {'By continuing you agree to our '}
+          {t('By continuing you agree to our ')}
           <Text
             style={{ textDecorationLine: 'underline' }}
             onPress={() => Linking.openURL('https://symponia.io/terms')}

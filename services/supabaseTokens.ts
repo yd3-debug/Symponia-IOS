@@ -67,6 +67,30 @@ export async function checkSubscription(): Promise<boolean> {
   }
 }
 
+/**
+ * Which plan the user is actually on, so no screen has to assume "monthly".
+ *
+ * Returns null when not subscribed. Subscribers whose row predates the
+ * subscription_product_id column (i.e. everyone who bought before this release)
+ * report the monthly id — which is correct, because monthly was the only plan
+ * that existed. They self-correct on their next renewal.
+ */
+export async function getActivePlanId(): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('subscription_expires_at, subscription_product_id')
+      .maybeSingle();
+
+    if (error || !data?.subscription_expires_at) return null;
+    if (new Date(data.subscription_expires_at) <= new Date()) return null;
+
+    return data.subscription_product_id ?? 'com.symponia.premium.monthly';
+  } catch {
+    return null;
+  }
+}
+
 // Optimistic local-only update for instant UI right after a reflection. The server
 // has already deducted the real balance; the next syncTokens() call reconciles.
 // Intentionally does NOT write to the server (that is the oracle's job).

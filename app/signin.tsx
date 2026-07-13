@@ -10,11 +10,12 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Text } from '@/components/Text';
+import { t } from '@/constants/i18n';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -143,7 +144,7 @@ export default function SignInScreen() {
                 activeOpacity={0.75}
               >
                 <Text style={[styles.secondaryBtnText, { color: colors.textSub }]}>
-                  already a member?{'  '}
+                  {t('already a member?')}{'  '}
                   <Text style={{ color: colors.cyan }}>sign in</Text>
                 </Text>
               </TouchableOpacity>
@@ -173,7 +174,7 @@ export default function SignInScreen() {
                 style={[styles.input, { color: colors.text, borderColor: colors.glassBorder, backgroundColor: inputBg }]}
                 value={email}
                 onChangeText={setEmail}
-                placeholder="your@email.com"
+                placeholder={t("your@email.com")}
                 placeholderTextColor={colors.textDim}
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -190,7 +191,7 @@ export default function SignInScreen() {
                   style={[styles.inputInner, { color: colors.text }]}
                   value={password}
                   onChangeText={setPassword}
-                  placeholder="password"
+                  placeholder={t("password")}
                   placeholderTextColor={colors.textDim}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
@@ -243,7 +244,7 @@ export default function SignInScreen() {
             </View>
 
             <Text style={[styles.footerNote, { color: colors.textDim }]}>
-              {'new here?  '}
+              {t('new here?')}{'  '}
               <Text
                 style={{ color: colors.cyan }}
                 onPress={() => {
@@ -289,7 +290,7 @@ export default function SignInScreen() {
                   style={[styles.input, { color: colors.text, borderColor: colors.glassBorder, backgroundColor: inputBg }]}
                   value={email}
                   onChangeText={setEmail}
-                  placeholder="your@email.com"
+                  placeholder={t("your@email.com")}
                   placeholderTextColor={colors.textDim}
                   keyboardType="email-address"
                   autoCapitalize="none"
@@ -325,7 +326,7 @@ export default function SignInScreen() {
                 <View style={[styles.sentCard, { borderColor: colors.cyanBorder, backgroundColor: colors.cyanDim }]}>
                   <Text style={[styles.sentIcon, { color: colors.cyan }]}>◎</Text>
                   <Text style={[styles.sentText, { color: colors.text }]}>
-                    reset link sent to{'\n'}{email.trim().toLowerCase()}{'\n\n'}
+                    {t('reset link sent to')}{'\n'}{email.trim().toLowerCase()}{'\n\n'}
                     <Text style={{ fontSize: 12 }}>if you don't see it, check your junk folder.</Text>
                   </Text>
                 </View>

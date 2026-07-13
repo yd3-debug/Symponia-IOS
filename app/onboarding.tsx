@@ -2,6 +2,8 @@ import { useTheme } from '@/constants/ThemeContext';
 import { TRIAL_TOKENS } from '@/constants/config';
 import { supabase } from '@/services/supabase';
 import { setMemoryEnabled } from '@/services/memory';
+import { LANGUAGES, getLanguage, t, type Lang } from '@/constants/i18n';
+import { saveLanguage } from '@/services/language';
 import { requestNotificationPermission, scheduleDaily } from '@/services/notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
@@ -16,11 +18,12 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Text } from '@/components/Text';
+import { SocialAuthButtons } from '@/components/SocialAuthButtons';
 import Animated, { FadeIn, FadeOut, useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming, Easing } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -32,7 +35,7 @@ const CELL_SIZE = (SCREEN_W - H_PAD * 2 - CELL_GAP * (COLS - 1)) / COLS;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Step = 'welcome' | 'depth' | 'attune' | 'name' | 'gender' | 'animals' | 'archetype' | 'memory' | 'notifications' | 'tokens' | 'legal';
+type Step = 'language' | 'welcome' | 'depth' | 'attune' | 'name' | 'gender' | 'animals' | 'archetype' | 'memory' | 'notifications' | 'tokens' | 'legal';
 type Frequency = 'Quiet' | 'Intellectual' | 'Deeply Emotional';
 
 // ── Data ──────────────────────────────────────────────────────────────────────
@@ -116,6 +119,56 @@ const ANIMALS = [
 
 // ── Step: Welcome ─────────────────────────────────────────────────────────────
 
+function LanguageStep({ colors, selected, onSelect }: {
+  colors: any; selected: Lang; onSelect: (l: Lang) => void;
+}) {
+  return (
+    <Animated.View entering={FadeIn.duration(500)} style={styles.stepWrap}>
+      <View style={styles.stepHeader}>
+        <Text style={[styles.glyph, { color: colors.violet, textAlign: 'center' }]}>◈</Text>
+        <Text style={[styles.stepQuestion, { color: colors.text, textAlign: 'center' }]}>
+          {'choose your\nlanguage'}
+        </Text>
+        <Text style={[styles.stepHint, { color: colors.textDim, textAlign: 'center' }]}>
+          Symponia will speak with you in this language
+        </Text>
+      </View>
+
+      <View style={styles.langGrid}>
+        {LANGUAGES.map((l) => {
+          const active = selected === l.code;
+          return (
+            <TouchableOpacity
+              key={l.code}
+              style={styles.langItem}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onSelect(l.code); }}
+              activeOpacity={0.75}
+            >
+              <View
+                style={[
+                  styles.langCircle,
+                  { borderColor: active ? colors.cyan : colors.glassBorder },
+                  active && { backgroundColor: colors.cyanDim, borderWidth: 2 },
+                ]}
+              >
+                <Text raw style={styles.langFlag}>{l.flag}</Text>
+              </View>
+              <Text
+                style={[styles.langLabel, { color: active ? colors.cyan : colors.textDim }]}
+                numberOfLines={2}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+              >
+                {l.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </Animated.View>
+  );
+}
+
 function WelcomeStep({ colors, onNext }: { colors: any; onNext: () => void }) {
   return (
     <Animated.View entering={FadeIn.duration(600)} style={styles.stepWrap}>
@@ -133,7 +186,7 @@ function WelcomeStep({ colors, onNext }: { colors: any; onNext: () => void }) {
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onNext(); }}
         activeOpacity={0.75}
       >
-        <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>begin</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.primaryBtnText, { color: colors.cyan }]}>begin</Text>
       </TouchableOpacity>
       <TouchableOpacity
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.replace('/signin'); }}
@@ -141,7 +194,7 @@ function WelcomeStep({ colors, onNext }: { colors: any; onNext: () => void }) {
         style={styles.signInLink}
       >
         <Text style={[styles.signInLinkText, { color: colors.textDim }]}>
-          {'already have an account?  '}
+          {t('already have an account?')}{'  '}
           <Text style={{ color: colors.cyan }}>sign in</Text>
         </Text>
       </TouchableOpacity>
@@ -169,7 +222,7 @@ function NameStep({ colors, name, setName, onNext }: {
         style={[styles.nameInput, { color: colors.text, borderColor: colors.glassBorder }]}
         value={name}
         onChangeText={setName}
-        placeholder="your name..."
+        placeholder={t("your name...")}
         placeholderTextColor={colors.textDim}
         autoFocus
         returnKeyType="done"
@@ -182,7 +235,7 @@ function NameStep({ colors, name, setName, onNext }: {
         onPress={() => { Keyboard.dismiss(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onNext(); }}
         activeOpacity={0.75}
       >
-        <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>continue</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.primaryBtnText, { color: colors.cyan }]}>continue</Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -230,7 +283,7 @@ function GenderStep({ colors, gender, setGender, onNext }: {
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onNext(); }}
         activeOpacity={0.75}
       >
-        <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>continue</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.primaryBtnText, { color: colors.cyan }]}>continue</Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -428,7 +481,7 @@ function AnimalsStep({ colors, animals, setAnimals, cols, setCols, onNext, onBac
         onPress={advance}
         activeOpacity={canAdvance ? 0.75 : 1}
       >
-        <Text style={[styles.primaryBtnText, { color: canAdvance ? colors.cyan : colors.textDim }]}>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.primaryBtnText, { color: canAdvance ? colors.cyan : colors.textDim }]}>
           {config.btnLabel}
         </Text>
       </TouchableOpacity>
@@ -493,7 +546,7 @@ function DepthStep({ colors, depth, setDepth, onNext }: {
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onNext(); }}
         activeOpacity={0.75}
       >
-        <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>continue</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.primaryBtnText, { color: colors.cyan }]}>continue</Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -517,7 +570,7 @@ function passwordStrength(pw: string): { score: number; label: string; color: st
 
 // ── Step: Legal ───────────────────────────────────────────────────────────────
 
-function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agreedTerms, setAgreedTerms, agreedMarketing, setAgreedMarketing, agreedMemory, setAgreedMemory, onComplete, authError }: {
+function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agreedTerms, setAgreedTerms, agreedMarketing, setAgreedMarketing, agreedMemory, setAgreedMemory, onComplete, onSocial, onSocialError, authError }: {
   colors: any; isDark: boolean;
   email: string; setEmail: (v: string) => void;
   password: string; setPassword: (v: string) => void;
@@ -525,6 +578,8 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
   agreedMarketing: boolean; setAgreedMarketing: (v: boolean) => void;
   agreedMemory: boolean; setAgreedMemory: (v: boolean) => void;
   onComplete: () => void;
+  onSocial: (r: { isNewUser: boolean; fullName: string | null }) => void;
+  onSocialError: (m: string) => void;
   authError: string;
 }) {
   const [showPassword, setShowPassword] = useState(false);
@@ -557,7 +612,7 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
         ]}
         value={email}
         onChangeText={setEmail}
-        placeholder="your@email.com"
+        placeholder={t("your@email.com")}
         placeholderTextColor={colors.textDim}
         keyboardType="email-address"
         autoCapitalize="none"
@@ -573,7 +628,7 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
           style={[styles.pwInput, { color: colors.text }]}
           value={password}
           onChangeText={setPassword}
-          placeholder="create a password (8+ chars)"
+          placeholder={t("create a password (8+ chars)")}
           placeholderTextColor={colors.textDim}
           secureTextEntry={!showPassword}
           autoCapitalize="none"
@@ -609,7 +664,7 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
           style={[styles.pwInput, { color: colors.text }]}
           value={confirmPassword}
           onChangeText={setConfirmPassword}
-          placeholder="confirm password"
+          placeholder={t("confirm password")}
           placeholderTextColor={colors.textDim}
           secureTextEntry={!showConfirm}
           autoCapitalize="none"
@@ -639,15 +694,15 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
           {agreedTerms && <Text style={[styles.checkMark, { color: colors.cyan }]}>✓</Text>}
         </View>
         <Text style={[styles.checkText, { color: colors.textSub }]}>
-          {'I agree to the '}
+          {t('I agree to the ')}
           <Text style={{ color: colors.cyan, textDecorationLine: 'underline' }} onPress={() => Linking.openURL('https://symponia.io/terms')}>
             Terms of Service
           </Text>
-          {' and '}
+          {t(' and ')}
           <Text style={{ color: colors.cyan, textDecorationLine: 'underline' }} onPress={() => Linking.openURL('https://symponia.io/privacy')}>
             Privacy Policy
           </Text>
-          {' (required)'}
+          {t(' (required)')}
         </Text>
       </Pressable>
 
@@ -683,10 +738,17 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
         activeOpacity={canContinue ? 0.75 : 1}
         disabled={!canContinue}
       >
-        <Text style={[styles.primaryBtnText, { color: canContinue ? colors.cyan : colors.textDim }]}>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.primaryBtnText, { color: canContinue ? colors.cyan : colors.textDim }]}>
           enter symponia
         </Text>
       </TouchableOpacity>
+
+      {/* Apple + Google. Terms must still be accepted — signing in with Apple is
+          not agreement to our terms, and gating on `agreedTerms` keeps the two
+          paths legally identical. */}
+      {agreedTerms && (
+        <SocialAuthButtons onSuccess={onSocial} onError={onSocialError} />
+      )}
     </Animated.View>
   );
 }
@@ -893,7 +955,7 @@ function AttuneInterstitial({ colors, onContinue }: { colors: any; onContinue: (
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onContinue(); }}
         activeOpacity={0.75}
       >
-        <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>keep going</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.primaryBtnText, { color: colors.cyan }]}>keep going</Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -1000,7 +1062,7 @@ function AttuneStep({ colors, tone, answers, setAnswers, onNext, onBack, onProgr
         onPress={advance}
         activeOpacity={hasAny ? 0.75 : 1}
       >
-        <Text style={[styles.primaryBtnText, { color: hasAny ? colors.cyan : colors.textDim }]}>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.primaryBtnText, { color: hasAny ? colors.cyan : colors.textDim }]}>
           {idx < total - 1 ? 'continue' : 'begin'}
         </Text>
       </TouchableOpacity>
@@ -1031,7 +1093,7 @@ function MemoryStep({ colors, agreed, setAgreed, onNext }: {
           {'I can hold the thread of your reflections over time,\nso this space deepens as it comes to know you.'}
         </Text>
         <Text style={[styles.stepHint, { color: colors.textSub, textAlign: 'center', marginTop: 14, lineHeight: 20 }]}>
-          only you can ever see them · private and encrypted{'\n'}never sold, never used to train AI
+          {'only you can ever see them · private and encrypted\nnever sold, never used to train AI'}
         </Text>
       </View>
       <TouchableOpacity
@@ -1039,10 +1101,10 @@ function MemoryStep({ colors, agreed, setAgreed, onNext }: {
         onPress={() => choose(true)}
         activeOpacity={0.75}
       >
-        <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>yes, remember me</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.primaryBtnText, { color: colors.cyan }]}>yes, remember me</Text>
       </TouchableOpacity>
       <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.glassBorder }]} onPress={() => choose(false)} activeOpacity={0.7}>
-        <Text style={[styles.secondaryBtnText, { color: colors.textDim }]}>not now</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.secondaryBtnText, { color: colors.textDim }]}>not now</Text>
       </TouchableOpacity>
       <Text style={[styles.stepHint, { color: colors.textDim, textAlign: 'center', marginTop: 10 }]}>
         you can change this anytime, and erase everything
@@ -1070,10 +1132,10 @@ function NotificationsStep({ colors, onEnable, onSkip }: {
         onPress={onEnable}
         activeOpacity={0.75}
       >
-        <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>enable reminders</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.primaryBtnText, { color: colors.cyan }]}>enable reminders</Text>
       </TouchableOpacity>
       <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.glassBorder }]} onPress={onSkip} activeOpacity={0.7}>
-        <Text style={[styles.secondaryBtnText, { color: colors.textDim }]}>maybe later</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.secondaryBtnText, { color: colors.textDim }]}>maybe later</Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -1106,7 +1168,7 @@ function TokensStep({ colors, onNext }: { colors: any; onNext: () => void }) {
           {`you start with ${TRIAL_TOKENS} free reflections. take your time with\nthem — nothing is charged now, and nothing renews on its own.`}
         </Text>
         <Text style={[styles.stepHint, { color: colors.textSub, textAlign: 'center', marginTop: 14, lineHeight: 20 }]}>
-          if they run out and you want to keep going,{'\n'}you choose to add more — never automatically.
+          {'if they run out and you want to keep going,\nyou choose to add more — never automatically.'}
         </Text>
       </View>
       <TouchableOpacity
@@ -1114,7 +1176,7 @@ function TokensStep({ colors, onNext }: { colors: any; onNext: () => void }) {
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onNext(); }}
         activeOpacity={0.75}
       >
-        <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>begin</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.primaryBtnText, { color: colors.cyan }]}>begin</Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -1143,13 +1205,17 @@ function WeavingProfile({ colors, name, onDone }: { colors: any; name: string; o
   }, []);
 
   const pct = ((mi + 1) / messages.length) * 100;
-  const who = name?.trim() ? `creating ${name.trim().toLowerCase()}’s space` : 'creating your private space';
+  // Built with t() + a placeholder so it can be translated; rendered `raw` so the
+  // user's own name is never passed through the translator.
+  const who = name?.trim()
+    ? t('creating {name}’s space', { name: name.trim().toLowerCase() })
+    : t('creating your private space');
 
   return (
     <Animated.View entering={FadeIn.duration(400)} style={styles.weaveWrap}>
       <Text style={[styles.glyph, { color: colors.violet }]}>◈</Text>
-      <Text style={[styles.weaveTitle, { color: colors.cyan }]}>{who}</Text>
-      <Text style={[styles.weaveMsg, { color: colors.textSub }]}>{messages[mi]}…</Text>
+      <Text raw style={[styles.weaveTitle, { color: colors.cyan }]}>{who}</Text>
+      <Text raw style={[styles.weaveMsg, { color: colors.textSub }]}>{`${t(messages[mi])}…`}</Text>
       <View style={[styles.weaveTrack, { backgroundColor: colors.glassBorder }]}>
         <View style={[styles.weaveFill, { backgroundColor: colors.cyan, width: `${pct}%` }]} />
       </View>
@@ -1191,7 +1257,7 @@ function ArchetypeInfoStep({ colors, isDark, onNext, onBack }: {
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onNext(); }}
         activeOpacity={0.75}
       >
-        <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>continue</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.primaryBtnText, { color: colors.cyan }]}>continue</Text>
       </TouchableOpacity>
       <TouchableOpacity onPress={onBack} activeOpacity={0.65} style={styles.animalBackBtn}>
         <Text style={[styles.animalBackText, { color: colors.textDim }]}>← back</Text>
@@ -1202,7 +1268,7 @@ function ArchetypeInfoStep({ colors, isDark, onNext, onBack }: {
 
 // ── Onboarding ────────────────────────────────────────────────────────────────
 
-const STEPS: Step[] = ['welcome', 'depth', 'attune', 'name', 'gender', 'animals', 'archetype', 'memory', 'notifications', 'tokens', 'legal'];
+const STEPS: Step[] = ['language', 'welcome', 'depth', 'attune', 'name', 'gender', 'animals', 'archetype', 'memory', 'notifications', 'tokens', 'legal'];
 
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
@@ -1218,6 +1284,7 @@ export default function OnboardingScreen() {
   const [password, setPassword] = useState('');
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [agreedMarketing, setAgreedMarketing] = useState(false);
+  const [lang, setLang] = useState<Lang>(getLanguage());
   const [agreedMemory, setAgreedMemory] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [showAIConsent, setShowAIConsent] = useState(false);
@@ -1230,6 +1297,114 @@ export default function OnboardingScreen() {
   const goNext = () => {
     const idx = STEPS.indexOf(step);
     if (idx < STEPS.length - 1) setStep(STEPS[idx + 1]);
+  };
+
+  /**
+   * Persist everything the intake gathered, then run the weaving animation.
+   *
+   * Shared by BOTH paths — email/password signup and Apple/Google — so the two
+   * can never drift. A social user who skipped the email form still gets their
+   * animals, voice, gender and language written exactly the same way; that bug
+   * (social users arriving in the app with an empty profile) is the classic one
+   * here, and it only exists when the two paths are written twice.
+   */
+
+  /**
+   * Turn the intake into something the AI can actually use.
+   *
+   * `attune` holds ANSWER INDICES per question. Indices are meaningless to a
+   * model, so resolve them here into the English source text of the question and
+   * the option(s) chosen. English (not the translated string) because that is the
+   * source of truth the system prompt is written in — and because the dictionaries
+   * are keyed on it, so this survives the user switching language later.
+   */
+  const buildAttunePayload = () => {
+    const set = ATTUNE_SETS[depth as Frequency] ?? [];
+    return attune
+      .map((picks, i) => {
+        const q = set[i];
+        if (!q || !picks || picks.length === 0) return null;
+        return { q: q.q, a: picks.map((p) => q.options[p]).filter(Boolean) };
+      })
+      .filter(Boolean) as { q: string; a: string[] }[];
+  };
+
+  /** Everything the intake gathered, written on-device. Path-independent. */
+  const persistLocal = async () => {
+    await AsyncStorage.multiSet([
+      ['symponia_onboarded', 'true'],
+      ['symponia_name', name.trim()],
+      ['symponia_gender', gender],
+      ['symponia_animals', JSON.stringify(animals)],
+      ['symponia_frequency', depth],
+      ['symponia_marketing', String(agreedMarketing)],
+      ['symponia_tokens', String(TRIAL_TOKENS)],
+      ['symponia_attune', JSON.stringify(attune)],
+      // THE NOTIFICATION ANSWER MUST BE PERSISTED HERE.
+      //
+      // Onboarding already asked, already requested iOS permission, and already
+      // scheduled the daily reflection — but it never wrote this key. Settings
+      // reads exactly this key, found nothing, and showed the toggle OFF. So the
+      // user was being asked a second time for something already switched on, and
+      // the switch they saw was lying about the real state.
+      ['symponia_notif_daily', String(notifEnabled)],
+    ]);
+    // Memory choice locally (always) + mirrored to profiles.memory_enabled.
+    // Default is off.
+    await setMemoryEnabled(agreedMemory);
+    try { await scheduleDaily(notifEnabled); } catch {}
+  };
+
+  const persistAndFinish = async (userId: string, userEmail: string) => {
+    const { error: profileError } = await supabase.from('profiles').upsert({
+      email: userEmail.toLowerCase(),
+      user_id: userId,
+      name: name.trim(),
+      gender,
+      animals: animals,
+      frequency: depth,
+      topup_tokens: TRIAL_TOKENS,
+      language: lang,
+      // The intake, finally going somewhere.
+      attune: buildAttunePayload(),
+    }, { onConflict: 'email' });
+    if (profileError) {
+      console.warn('[Onboarding] Profile upsert failed (trigger row exists):', profileError.message);
+    }
+    await persistLocal();
+  };
+
+  /** Apple / Google. The account already exists by the time this runs. */
+  const completeWithSocial = async (r: { isNewUser: boolean; fullName: string | null }) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setAuthError('');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No session after social sign-in.');
+
+      // A RETURNING user must not be dragged back through intake — they already
+      // have a profile, animals, a voice. Straight into the app.
+      if (!r.isNewUser) {
+        await AsyncStorage.setItem('symponia_onboarded', 'true');
+        router.replace('/(tabs)');
+        return;
+      }
+
+      // Apple hands over the real name exactly once, on first authorisation.
+      // If the user left the name step blank, take it — otherwise theirs wins.
+      if (!name.trim() && r.fullName) setName(r.fullName.split(' ')[0]);
+
+      await persistAndFinish(user.id, user.email ?? '');
+      // Social users go through the SAME AI-consent gate. Skipping it because
+      // they signed in with Apple would be a 5.1.2(i) violation — consent to
+      // third-party AI processing is not implied by having an Apple ID.
+      setShowAIConsent(true);
+    } catch (e: any) {
+      setAuthError(e?.message ?? 'Sign-in failed.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const complete = async () => {
@@ -1249,35 +1424,8 @@ export default function OnboardingScreen() {
     }
 
     if (authData.user) {
-      const { error: profileError } = await supabase.from('profiles').upsert({
-        email: email.trim().toLowerCase(),
-        user_id: authData.user.id,
-        name: name.trim(),
-        gender,
-        animals: animals,
-        frequency: depth,
-        topup_tokens: TRIAL_TOKENS,
-      }, { onConflict: 'email' });
-      if (profileError) {
-        console.warn('[Onboarding] Profile upsert failed (trigger row exists):', profileError.message);
-      }
+      await persistAndFinish(authData.user.id, email.trim());
     }
-
-    await AsyncStorage.multiSet([
-      ['symponia_onboarded', 'true'],
-      ['symponia_name', name.trim()],
-      ['symponia_gender', gender],
-      ['symponia_animals', JSON.stringify(animals)],
-      ['symponia_frequency', depth],
-      ['symponia_marketing', String(agreedMarketing)],
-      ['symponia_tokens', String(TRIAL_TOKENS)],
-      ['symponia_attune', JSON.stringify(attune)],
-    ]);
-
-    // Records the memory choice locally (always) and mirrors to profiles.memory_enabled
-    // (best-effort; no-op until the column migration is applied). Default is off.
-    await setMemoryEnabled(agreedMemory);
-    try { await scheduleDaily(notifEnabled); } catch {}
 
     setIsSubmitting(false);
     setShowAIConsent(true);
@@ -1311,14 +1459,23 @@ export default function OnboardingScreen() {
       await AsyncStorage.removeItem('symponia_ai_consent');
       setShowWeaving(false);
       Alert.alert(
-        'Setup incomplete',
-        'We could not record your consent on our servers. Please check your connection and try again.',
-        [{ text: 'OK' }],
+        t('Setup incomplete'),
+        t('We could not record your consent on our servers. Please check your connection and try again.'),
+        [{ text: t('OK') }],
       );
       return;
     }
 
-    router.replace('/(tabs)');
+    // The account exists, consent is recorded — now offer the trial, before they
+    // reach the app. This is the only moment they will ever be this warm: they
+    // have just spent five minutes telling us who they are, and the profile has
+    // just been woven for them. Asking later, after they've hit a wall
+    // mid-conversation, converts far worse and feels like a bait.
+    //
+    // It is NOT a hard wall. The paywall can be dismissed, and they fall through
+    // to the free reflections. Locking someone out of a reflective companion
+    // seconds after they finished an intimate intake would be ugly.
+    router.replace('/paywall?intro=1');
   };
 
   const stepIndex = STEPS.indexOf(step);
@@ -1326,7 +1483,7 @@ export default function OnboardingScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.bg, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      {step !== 'welcome' && (
+      {stepIndex > 0 && (
         <View style={[styles.progressTrack, { backgroundColor: colors.glassBorder }]}>
           <Animated.View
             style={[
@@ -1364,6 +1521,7 @@ export default function OnboardingScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {step === 'language' && <LanguageStep key="language" colors={colors} selected={lang} onSelect={(l) => { setLang(l); saveLanguage(l); goNext(); }} />}
         {step === 'welcome' && <WelcomeStep key="welcome" colors={colors} onNext={goNext} />}
         {step === 'attune'  && <AttuneStep key="attune" colors={colors} tone={depth} answers={attune} setAnswers={setAttune} onNext={goNext} onBack={() => setStep('depth')} onProgress={setAttuneProgress} />}
         {step === 'name'    && <NameStep key="name" colors={colors} name={name} setName={setName} onNext={goNext} />}
@@ -1390,6 +1548,8 @@ export default function OnboardingScreen() {
             agreedMemory={agreedMemory}
             setAgreedMemory={setAgreedMemory}
             onComplete={complete}
+            onSocial={completeWithSocial}
+            onSocialError={setAuthError}
             authError={authError}
           />
         )}
@@ -1407,9 +1567,9 @@ function AIConsentStep({ colors, isDark, onComplete }: { colors: any; isDark: bo
 
   const handleDecline = () => {
     Alert.alert(
-      'AI processing required',
-      "Symponia requires AI processing to function. Without consent to send messages to Anthropic, the app's reflection features cannot be used. You can revisit the consent screen, or close Symponia from your home screen at any time.",
-      [{ text: 'Return to consent', style: 'cancel' }],
+      t('AI processing required'),
+      t("Symponia requires AI processing to function. Without consent to send messages to Anthropic, the app's reflection features cannot be used. You can revisit the consent screen, or close Symponia from your home screen at any time."),
+      [{ text: t('Return to consent'), style: 'cancel' }],
     );
   };
 
@@ -1434,15 +1594,15 @@ function AIConsentStep({ colors, isDark, onComplete }: { colors: any; isDark: bo
         </View>
 
         <Text style={[styles.aiConsentLinks, { color: colors.textDim }]}>
-          {'Read our '}
+          {t('Read our ')}
           <Text style={{ color: colors.cyan, textDecorationLine: 'underline' }} onPress={() => Linking.openURL('https://symponia.io/privacy')}>
             Privacy Policy
           </Text>
-          {' and '}
+          {t(' and ')}
           <Text style={{ color: colors.cyan, textDecorationLine: 'underline' }} onPress={() => Linking.openURL('https://www.symponia.io/terms')}>
             Terms of Service
           </Text>
-          {' before continuing.'}
+          {t(' before continuing.')}
         </Text>
 
         <Pressable
@@ -1473,7 +1633,7 @@ function AIConsentStep({ colors, isDark, onComplete }: { colors: any; isDark: bo
           activeOpacity={agreed ? 0.75 : 1}
           disabled={!agreed}
         >
-          <Text style={[styles.primaryBtnText, { color: agreed ? colors.cyan : colors.textDim }]}>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.primaryBtnText, { color: agreed ? colors.cyan : colors.textDim }]}>
             I understand — enter Symponia
           </Text>
         </TouchableOpacity>
@@ -1483,7 +1643,7 @@ function AIConsentStep({ colors, isDark, onComplete }: { colors: any; isDark: bo
           onPress={handleDecline}
           activeOpacity={0.7}
         >
-          <Text style={[styles.secondaryBtnText, { color: colors.textDim }]}>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.secondaryBtnText, { color: colors.textDim }]}>
             I do not consent
           </Text>
         </TouchableOpacity>
@@ -1542,6 +1702,36 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingTop: 60,
     paddingBottom: 40,
+  },
+  langGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    rowGap: 22,
+    columnGap: 14,
+    marginTop: 26,
+  },
+  langItem: {
+    width: 100,
+    alignItems: 'center',
+  },
+  langCircle: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  langFlag: {
+    fontSize: 34,
+    lineHeight: 42,
+  },
+  langLabel: {
+    marginTop: 8,
+    fontSize: 12.5,
+    letterSpacing: 0.2,
+    textAlign: 'center',
   },
   tokenOrb: {
     width: 132,
@@ -1979,7 +2169,7 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: {
     fontSize: 11,
-    letterSpacing: 3,
+    letterSpacing: 1.6,
     fontFamily: FONT,
     fontWeight: '500',
   },
@@ -2019,7 +2209,7 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: {
     fontSize: 11,
-    letterSpacing: 3,
+    letterSpacing: 1.6,
     fontFamily: FONT,
     fontWeight: '400',
   },

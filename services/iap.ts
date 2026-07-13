@@ -13,8 +13,45 @@ export const IAP_PRODUCTS = [
   { id: 'com.symponia.tokens150', tokens: 150 },
 ] as const;
 
+// Subscription plans.
+//
+// SINGLE SOURCE OF TRUTH for plan copy. Every plan-dependent string lives here,
+// so no screen can ever tell a weekly subscriber their plan "renews monthly".
+// The `*Key` fields are English source strings, i.e. i18n dictionary keys — all
+// verified against the 8 dictionaries by scripts/i18n-audit.py.
+//
+// NO QUOTAS. A subscription is access, not a bucket of reflections. Usage is
+// governed by the fair-use window in the oracle (50 / 7 days), which the user
+// never sees unless they reach it. Nothing here promises a number, because the
+// app no longer counts.
+//
+// {price} is filled from the STORE at runtime, never hardcoded — that keeps it
+// correct in every currency and satisfies Apple's requirement to show the real
+// price at the point of purchase.
 export const SUBSCRIPTION_PRODUCTS = [
-  { id: 'com.symponia.premium.monthly', label: 'Monthly' },
+  {
+    id: 'com.symponia.premium.monthly',
+    label: 'Monthly',
+    nameKey:    'Symponia Monthly',
+    titleKey:   'Unlimited — {price} / month',
+    bodyKey:    'Reflect as often as you need, across Archetype, My Day and Conversation.',
+    renewKey:   'Auto-renews every month until cancelled. Cancel anytime in your Apple ID settings.',
+    shortRenewKey: 'auto-renews monthly · cancel anytime in App Store Settings',
+    activatedKey:  'Symponia Monthly activated.',
+    pitchKey:   'Reflect as often as you need.',
+    renewsKey:  'Renews monthly with your subscription',
+  },
+  // WEEKLY IS DELIBERATELY NOT HERE.
+  //
+  // It was never created in App Store Connect, so the store returns nothing for
+  // it — leaving a permanently-loading card with a "…" price on both the paywall
+  // and Settings. And with everything unlimited, "7 days free, then £4.99 every
+  // week" is a worse deal than the monthly and only muddies the choice.
+  //
+  // If you ever add it back: create com.symponia.premium.weekly in the SAME
+  // subscription group (different groups = a user can be billed for both), give
+  // it its own 7-day intro offer, and re-add it to SUBSCRIPTION_IDS in
+  // verify-receipt AND apple-notification or its renewals are silently ignored.
 ] as const;
 
 export type IAPProductId = (typeof IAP_PRODUCTS)[number]['id'];
@@ -131,10 +168,33 @@ export async function fetchStoreSubscriptions() {
     return [];
   }
   console.log(`[IAP] fetchStoreSubscriptions → ${products.length} product(s):`, products.map((p) => `${p.id}=${p.displayPrice}`));
-  return products.map((p) => ({
-    productId: p.id,
-    localizedPrice: p.displayPrice ?? '',
-  }));
+
+  return products.map((p) => {
+    // Free trial, read from the STORE rather than hardcoded. If the introductory
+    // offer isn't configured in App Store Connect yet, this is simply absent and
+    // the paywall silently falls back to showing the price — it never promises a
+    // trial that doesn't exist. That matters: advertising a trial Apple doesn't
+    // actually grant is a guideline 3.1.2 rejection.
+    const intro = (p as any)?.subscriptionInfoIOS?.introductoryOffer ?? null;
+    const isFreeTrial = intro?.paymentMode === 'free-trial';
+
+    return {
+      productId: p.id,
+      localizedPrice: p.displayPrice ?? '',
+      /** e.g. 7 when the offer is "7 days free". Null when there is no trial. */
+      trialDays: isFreeTrial ? periodToDays(intro.period, intro.periodCount ?? 1) : null,
+    };
+  });
+}
+
+/** Apple gives the trial as a unit + count ("1 week"); the UI wants days. */
+function periodToDays(period: unknown, count: number): number | null {
+  const unit = String(period ?? '').toLowerCase();
+  if (unit.includes('day')) return count;
+  if (unit.includes('week')) return count * 7;
+  if (unit.includes('month')) return count * 30;
+  if (unit.includes('year')) return count * 365;
+  return null;
 }
 
 // ── Purchase triggers ─────────────────────────────────────────────────────────
