@@ -8,7 +8,7 @@ import { requestNotificationPermission, scheduleDaily } from '@/services/notific
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Dimensions,
@@ -570,7 +570,7 @@ function passwordStrength(pw: string): { score: number; label: string; color: st
 
 // ── Step: Legal ───────────────────────────────────────────────────────────────
 
-function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agreedTerms, setAgreedTerms, agreedMarketing, setAgreedMarketing, agreedMemory, setAgreedMemory, onComplete, onSocial, onSocialError, authError }: {
+function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agreedTerms, setAgreedTerms, agreedMarketing, setAgreedMarketing, agreedMemory, setAgreedMemory, onComplete, onSocial, onSocialError, authError, scrollRef }: {
   colors: any; isDark: boolean;
   email: string; setEmail: (v: string) => void;
   password: string; setPassword: (v: string) => void;
@@ -581,16 +581,45 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
   onSocial: (r: { isNewUser: boolean; fullName: string | null }) => void;
   onSocialError: (m: string) => void;
   authError: string;
+  scrollRef: React.RefObject<any>;
 }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
+  // Set when someone taps Apple/Google without having accepted the Terms.
+  const [termsError, setTermsError] = useState(false);
+  const [termsY, setTermsY] = useState(0);
 
   const strength = passwordStrength(password);
   const passwordsMatch = password === confirmPassword;
   const canContinue = agreedTerms && email.includes('@') && password.length >= 8 && passwordsMatch && confirmPassword.length > 0;
 
   const inputBg = isDark ? 'rgba(120,90,220,0.06)' : 'rgba(70,50,160,0.06)';
+
+  const acceptTerms = (next: boolean) => {
+    setAgreedTerms(next);
+    if (next) setTermsError(false); // ticking the box answers the complaint
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  /**
+   * Consent gate for the social buttons.
+   *
+   * The buttons are ALWAYS visible now — they sit at the top of the step, above
+   * the checkbox, so hiding them until the box is ticked (the old behaviour)
+   * meant hiding them behind a control the user could not yet see. But consent
+   * is still mandatory and still explicit: signing in with Apple is not
+   * agreement to our Terms, and both paths must stay legally identical. So the
+   * tap is refused, loudly — error text at the checkbox, warning haptic, the
+   * checkbox tinted red and scrolled into view — instead of silently swallowed.
+   */
+  const requireTerms = () => {
+    if (agreedTerms) return true;
+    setTermsError(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    scrollRef?.current?.scrollTo({ y: Math.max(0, termsY - 40), animated: true });
+    return false;
+  };
 
   return (
     <Animated.View entering={FadeIn.duration(400)} style={styles.stepWrap}>
@@ -603,6 +632,14 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
           your email lets us reach you when something important stirs
         </Text>
       </View>
+
+      {/* Apple + Google first, then the "or" rule, then the email form. */}
+      <SocialAuthButtons
+        onSuccess={onSocial}
+        onError={onSocialError}
+        canSignIn={requireTerms}
+        dividerPosition="bottom"
+      />
 
       {/* Email */}
       <TextInput
@@ -634,9 +671,15 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="next"
-          textContentType="newPassword"
-          autoComplete="new-password"
-          passwordRules="minlength: 8;"
+          // textContentType is deliberately "password", NOT "newPassword".
+          // "newPassword" (with passwordRules) triggers iOS's Automatic Strong
+          // Password overlay on focus. On iOS 26.x that overlay crashes the app
+          // the instant this field is tapped — reported from a real device on
+          // 26.5.2. "password" still lets a manager autofill and offer to save,
+          // but does not summon the strong-password generator. Do NOT restore
+          // "newPassword"/passwordRules without testing focus on iOS 26+.
+          textContentType="password"
+          autoComplete="password"
         />
         <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={8} activeOpacity={0.6} style={styles.eyeBtn}>
           <Text style={[styles.eyeText, { color: colors.textDim }]}>{showPassword ? 'hide' : 'show'}</Text>
@@ -688,9 +731,10 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
 
       <Pressable
         style={styles.checkRow}
-        onPress={() => { setAgreedTerms(!agreedTerms); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+        onLayout={(e) => setTermsY(e.nativeEvent.layout.y)}
+        onPress={() => acceptTerms(!agreedTerms)}
       >
-        <View style={[styles.checkbox, { borderColor: agreedTerms ? colors.cyan : colors.glassBorder }, agreedTerms && { backgroundColor: colors.cyanDim }]}>
+        <View style={[styles.checkbox, { borderColor: termsError ? '#e07070' : agreedTerms ? colors.cyan : colors.glassBorder }, agreedTerms && { backgroundColor: colors.cyanDim }]}>
           {agreedTerms && <Text style={[styles.checkMark, { color: colors.cyan }]}>✓</Text>}
         </View>
         <Text style={[styles.checkText, { color: colors.textSub }]}>
@@ -705,6 +749,14 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
           {t(' (required)')}
         </Text>
       </Pressable>
+
+      {termsError && (
+        <Animated.View entering={FadeIn.duration(200)}>
+          <Text style={[styles.authError, { color: '#e07070' }]}>
+            {t('Please accept the Terms to continue.')}
+          </Text>
+        </Animated.View>
+      )}
 
       <Pressable
         style={styles.checkRow}
@@ -742,13 +794,6 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
           enter symponia
         </Text>
       </TouchableOpacity>
-
-      {/* Apple + Google. Terms must still be accepted — signing in with Apple is
-          not agreement to our terms, and gating on `agreedTerms` keeps the two
-          paths legally identical. */}
-      {agreedTerms && (
-        <SocialAuthButtons onSuccess={onSocial} onError={onSocialError} />
-      )}
     </Animated.View>
   );
 }
@@ -1113,8 +1158,8 @@ function MemoryStep({ colors, agreed, setAgreed, onNext }: {
   );
 }
 
-function NotificationsStep({ colors, onEnable, onSkip }: {
-  colors: any; onEnable: () => void; onSkip: () => void;
+function NotificationsStep({ colors, blocked, onEnable, onOpenSettings, onSkip }: {
+  colors: any; blocked: boolean; onEnable: () => void; onOpenSettings: () => void; onSkip: () => void;
 }) {
   return (
     <Animated.View entering={FadeIn.duration(450)} style={styles.stepWrap}>
@@ -1126,16 +1171,39 @@ function NotificationsStep({ colors, onEnable, onSkip }: {
         <Text style={[styles.welcomeBody, { color: colors.textDim, textAlign: 'center' }]}>
           {'A short daily reflection can arrive on your lock screen —\na small, private prompt to pause and return to yourself.\nNo noise. Just one gentle nudge inward.'}
         </Text>
+
+        {/* iOS asks once, ever. If notifications were already refused, tapping
+            "enable" cannot open a system dialog — so say so, and offer the only
+            door that still works. */}
+        {blocked && (
+          <Animated.View entering={FadeIn.duration(250)}>
+            <Text style={[styles.welcomeBody, { color: colors.textSub, textAlign: 'center' }]}>
+              {'Notifications are turned off for Symponia in iOS Settings, so\niOS will not ask again. You can turn them on there whenever\nyou like — or continue without them.'}
+            </Text>
+          </Animated.View>
+        )}
       </View>
-      <TouchableOpacity
-        style={[styles.primaryBtn, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder }]}
-        onPress={onEnable}
-        activeOpacity={0.75}
-      >
-        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.primaryBtnText, { color: colors.cyan }]}>enable reminders</Text>
-      </TouchableOpacity>
+
+      {blocked ? (
+        <TouchableOpacity
+          style={[styles.primaryBtn, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder }]}
+          onPress={onOpenSettings}
+          activeOpacity={0.75}
+        >
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.primaryBtnText, { color: colors.cyan }]}>open settings</Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          style={[styles.primaryBtn, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder }]}
+          onPress={onEnable}
+          activeOpacity={0.75}
+        >
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.primaryBtnText, { color: colors.cyan }]}>enable reminders</Text>
+        </TouchableOpacity>
+      )}
+
       <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.glassBorder }]} onPress={onSkip} activeOpacity={0.7}>
-        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.secondaryBtnText, { color: colors.textDim }]}>maybe later</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.secondaryBtnText, { color: colors.textDim }]}>{blocked ? 'continue' : 'maybe later'}</Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -1293,6 +1361,14 @@ export default function OnboardingScreen() {
   const [attuneProgress, setAttuneProgress] = useState(0);
   const [authError, setAuthError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Needed so the legal step can scroll its Terms checkbox into view when a
+  // social sign-in is refused for want of consent.
+  const scrollRef = useRef<ScrollView>(null);
+  // iOS only ever shows the notification permission alert once. If it has been
+  // denied before (previous install, previous run), requestPermissionsAsync()
+  // returns 'denied' without showing anything — so we surface a route into
+  // Settings instead of pretending the tap did nothing.
+  const [notifBlocked, setNotifBlocked] = useState(false);
 
   const goNext = () => {
     const idx = STEPS.indexOf(step);
@@ -1412,23 +1488,51 @@ export default function OnboardingScreen() {
     setIsSubmitting(true);
     setAuthError('');
 
-    const { data: authData, error } = await supabase.auth.signUp({
-      email: email.trim().toLowerCase(),
-      password,
-    });
+    // NOTHING in here may throw uncaught. This handler runs on the account-
+    // creation tap; an unhandled rejection here is exactly what reads to a user
+    // as "the app crashed when I made my account." Every path below either
+    // succeeds or lands a human-readable message in authError — never a throw.
+    try {
+      const { data: authData, error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password,
+      });
 
-    if (error) {
-      setAuthError(error.message);
+      if (error) {
+        setAuthError(error.message);
+        return;
+      }
+
+      // signUp returns a user but NO session when "Confirm email" is enabled in
+      // Supabase. Every write below (and the consent write later) is RLS-gated on
+      // auth.uid(), so with no session they are silently rejected and the person
+      // dead-ends at "Setup incomplete" — the failure we have now fixed twice.
+      // Detect it explicitly and say what to do, rather than marching forward
+      // into writes that cannot succeed.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setAuthError(
+          t('Your account was created, but email confirmation is on. Please confirm your email, then sign in.'),
+        );
+        return;
+      }
+
+      if (authData.user) {
+        await persistAndFinish(authData.user.id, email.trim());
+      }
+
+      setShowAIConsent(true);
+    } catch (e: unknown) {
+      // A thrown error (network dropped mid-request, a native module, anything)
+      // becomes a message the person can act on — not a crash.
+      setAuthError(
+        e instanceof Error && e.message
+          ? e.message
+          : t('We could not finish creating your account. Please check your connection and try again.'),
+      );
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-
-    if (authData.user) {
-      await persistAndFinish(authData.user.id, email.trim());
-    }
-
-    setIsSubmitting(false);
-    setShowAIConsent(true);
   };
 
   const finalizeOnboarding = async () => {
@@ -1517,6 +1621,7 @@ export default function OnboardingScreen() {
         <AIConsentStep colors={colors} isDark={isDark} onComplete={() => setShowWeaving(true)} />
       ) : (
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -1529,7 +1634,27 @@ export default function OnboardingScreen() {
         {step === 'animals' && <AnimalsStep key="animals" colors={colors} animals={animals} setAnimals={setAnimals} cols={animalCols} setCols={setAnimalCols} onNext={goNext} onBack={() => setStep('gender')} />}
         {step === 'archetype' && <ArchetypeInfoStep key="archetype" colors={colors} isDark={isDark} onNext={goNext} onBack={() => setStep('animals')} />}
         {step === 'memory' && <MemoryStep key="memory" colors={colors} agreed={agreedMemory} setAgreed={setAgreedMemory} onNext={goNext} />}
-        {step === 'notifications' && <NotificationsStep key="notifications" colors={colors} onEnable={async () => { const g = await requestNotificationPermission(); setNotifEnabled(g); goNext(); }} onSkip={() => { setNotifEnabled(false); goNext(); }} />}
+        {step === 'notifications' && (
+          <NotificationsStep
+            key="notifications"
+            colors={colors}
+            blocked={notifBlocked}
+            onEnable={async () => {
+              const result = await requestNotificationPermission();
+              setNotifEnabled(result === 'granted');
+              // 'blocked' means iOS will never show the system alert again for
+              // this install. Stay on the step and explain — walking forward
+              // silently is exactly the bug this replaces. They can still skip.
+              if (result === 'blocked') {
+                setNotifBlocked(true);
+                return;
+              }
+              goNext();
+            }}
+            onOpenSettings={() => { Linking.openSettings(); }}
+            onSkip={() => { setNotifEnabled(false); goNext(); }}
+          />
+        )}
         {step === 'tokens' && <TokensStep key="tokens" colors={colors} onNext={goNext} />}
         {step === 'depth'   && <DepthStep key="depth" colors={colors} depth={depth} setDepth={setDepth} onNext={goNext} />}
         {step === 'legal'   && (
@@ -1551,6 +1676,7 @@ export default function OnboardingScreen() {
             onSocial={completeWithSocial}
             onSocialError={setAuthError}
             authError={authError}
+            scrollRef={scrollRef}
           />
         )}
       </ScrollView>

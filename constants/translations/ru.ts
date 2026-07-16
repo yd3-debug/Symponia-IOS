@@ -665,6 +665,18 @@ const ru: Record<string, string> = {
   'work with your shadow · {animal}  →': 'работа с твоей тенью · {animal}  →',
   'work with your shadow  →': 'работа с твоей тенью  →',
   'you start with {n} free reflections. take your time with\nthem — nothing is charged now, and nothing renews on its own.': 'ты начинаешь с {n} бесплатных размышлений. не торопись с\nними — сейчас ничего не списывается, и ничто не продлевается само.',
+
+  // ── Coverage pass 13: terms gate on social sign-in + blocked notifications ──
+  'Please accept the Terms to continue.': 'Пожалуйста, примите Условия, чтобы продолжить.',
+  'Notifications are turned off': 'Уведомления отключены',
+  'Notifications are turned off for Symponia in iOS Settings, so\niOS will not ask again. You can turn them on there whenever\nyou like — or continue without them.': 'Уведомления Symponia отключены в настройках iOS,\nпоэтому iOS больше не спросит. Вы можете включить их там\nв любой момент — или продолжить без них.',
+  'Notifications for Symponia are turned off in iOS Settings, so iOS will not ask again. You can turn them on there whenever you like.': 'Уведомления Symponia отключены в настройках iOS, поэтому iOS больше не спросит. Вы можете включить их там в любой момент.',
+  'Open Settings': 'Открыть настройки',
+  'open settings': 'открыть настройки',
+
+  // ── Coverage pass 14: signup error messages ──
+  'Your account was created, but email confirmation is on. Please confirm your email, then sign in.': 'Ваш аккаунт создан, но подтверждение по эл. почте включено. Пожалуйста, подтвердите почту, а затем войдите.',
+  'We could not finish creating your account. Please check your connection and try again.': 'Не удалось завершить создание вашего аккаунта. Пожалуйста, проверьте соединение и попробуйте ещё раз.',
 };
 
 export default ru;

@@ -664,6 +664,18 @@ const it: Record<string, string> = {
   'work with your shadow · {animal}  →': 'lavora con la tua ombra · {animal}  →',
   'work with your shadow  →': 'lavora con la tua ombra  →',
   'you start with {n} free reflections. take your time with\nthem — nothing is charged now, and nothing renews on its own.': 'inizi con {n} riflessioni gratuite. prenditi il tuo tempo con\nesse — ora non viene addebitato nulla, e nulla si rinnova da sé.',
+
+  // ── Coverage pass 13: terms gate on social sign-in + blocked notifications ──
+  'Please accept the Terms to continue.': 'Accetta i Termini per continuare.',
+  'Notifications are turned off': 'Le notifiche sono disattivate',
+  'Notifications are turned off for Symponia in iOS Settings, so\niOS will not ask again. You can turn them on there whenever\nyou like — or continue without them.': 'Le notifiche di Symponia sono disattivate nelle Impostazioni iOS,\nquindi iOS non lo chiederà più. Puoi attivarle da lì\nquando vuoi — oppure continuare senza.',
+  'Notifications for Symponia are turned off in iOS Settings, so iOS will not ask again. You can turn them on there whenever you like.': 'Le notifiche di Symponia sono disattivate nelle Impostazioni iOS, quindi iOS non lo chiederà più. Puoi attivarle da lì quando vuoi.',
+  'Open Settings': 'Apri Impostazioni',
+  'open settings': 'apri impostazioni',
+
+  // ── Coverage pass 14: signup error messages ──
+  'Your account was created, but email confirmation is on. Please confirm your email, then sign in.': 'Il tuo account è stato creato, ma la conferma via email è attiva. Conferma la tua email e poi accedi.',
+  'We could not finish creating your account. Please check your connection and try again.': 'Non siamo riusciti a completare la creazione del tuo account. Controlla la connessione e riprova.',
 };
 
 export default it;

@@ -664,6 +664,18 @@ const sv: Record<string, string> = {
   'work with your shadow · {animal}  →': 'arbeta med din skugga · {animal}  →',
   'work with your shadow  →': 'arbeta med din skugga  →',
   'you start with {n} free reflections. take your time with\nthem — nothing is charged now, and nothing renews on its own.': 'du börjar med {n} kostnadsfria reflektioner. ta god tid på dig med\ndem — inget dras nu, och inget förnyas av sig självt.',
+
+  // ── Coverage pass 13: terms gate on social sign-in + blocked notifications ──
+  'Please accept the Terms to continue.': 'Godkänn villkoren för att fortsätta.',
+  'Notifications are turned off': 'Aviseringar är avstängda',
+  'Notifications are turned off for Symponia in iOS Settings, so\niOS will not ask again. You can turn them on there whenever\nyou like — or continue without them.': 'Aviseringar för Symponia är avstängda i iOS-inställningarna,\nså iOS frågar inte igen. Du kan slå på dem där\nnär du vill — eller fortsätta utan dem.',
+  'Notifications for Symponia are turned off in iOS Settings, so iOS will not ask again. You can turn them on there whenever you like.': 'Aviseringar för Symponia är avstängda i iOS-inställningarna, så iOS frågar inte igen. Du kan slå på dem där när du vill.',
+  'Open Settings': 'Öppna Inställningar',
+  'open settings': 'öppna inställningar',
+
+  // ── Coverage pass 14: signup error messages ──
+  'Your account was created, but email confirmation is on. Please confirm your email, then sign in.': 'Ditt konto skapades, men e-postbekräftelse är påslagen. Bekräfta din e-post och logga sedan in.',
+  'We could not finish creating your account. Please check your connection and try again.': 'Vi kunde inte slutföra skapandet av ditt konto. Kontrollera din anslutning och försök igen.',
 };
 
 export default sv;

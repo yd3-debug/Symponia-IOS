@@ -664,6 +664,18 @@ const da: Record<string, string> = {
   'work with your shadow · {animal}  →': 'arbejd med din skygge · {animal}  →',
   'work with your shadow  →': 'arbejd med din skygge  →',
   'you start with {n} free reflections. take your time with\nthem — nothing is charged now, and nothing renews on its own.': 'du begynder med {n} gratis refleksioner. tag dig god tid med\ndem — der bliver ikke trukket noget nu, og intet fornyes af sig selv.',
+
+  // ── Coverage pass 13: terms gate on social sign-in + blocked notifications ──
+  'Please accept the Terms to continue.': 'Accepter venligst vilkårene for at fortsætte.',
+  'Notifications are turned off': 'Notifikationer er slået fra',
+  'Notifications are turned off for Symponia in iOS Settings, so\niOS will not ask again. You can turn them on there whenever\nyou like — or continue without them.': 'Notifikationer for Symponia er slået fra i iOS-indstillinger,\nså iOS spørger ikke igen. Du kan slå dem til dér\nnår du vil — eller fortsætte uden dem.',
+  'Notifications for Symponia are turned off in iOS Settings, so iOS will not ask again. You can turn them on there whenever you like.': 'Notifikationer for Symponia er slået fra i iOS-indstillinger, så iOS spørger ikke igen. Du kan slå dem til dér, når du vil.',
+  'Open Settings': 'Åbn Indstillinger',
+  'open settings': 'åbn indstillinger',
+
+  // ── Coverage pass 14: signup error messages ──
+  'Your account was created, but email confirmation is on. Please confirm your email, then sign in.': 'Din konto blev oprettet, men e-mailbekræftelse er slået til. Bekræft venligst din e-mail, og log derefter ind.',
+  'We could not finish creating your account. Please check your connection and try again.': 'Vi kunne ikke færdiggøre oprettelsen af din konto. Tjek venligst din forbindelse, og prøv igen.',
 };
 
 export default da;

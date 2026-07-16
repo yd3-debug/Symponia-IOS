@@ -17,11 +17,38 @@ Notifications.setNotificationHandler({
 
 // ── Permission ────────────────────────────────────────────────────────────────
 
-export async function requestNotificationPermission(): Promise<boolean> {
-  const { status: existing } = await Notifications.getPermissionsAsync();
-  if (existing === 'granted') return true;
+/**
+ * 'granted' — we may schedule.
+ * 'denied'  — the user just said no (the system alert WAS shown).
+ * 'blocked' — iOS will never show the alert again; the only way back is Settings.
+ */
+export type NotificationPermission = 'granted' | 'denied' | 'blocked';
+
+/**
+ * iOS shows the notification permission alert EXACTLY ONCE per install.
+ *
+ * After that first answer, `requestPermissionsAsync()` resolves immediately with
+ * the stored answer and NO dialog is presented. So a previously-denied user who
+ * taps enable sees nothing happen at all — the old code returned `false` and
+ * could not distinguish a fresh refusal from iOS declining to even ask, so it
+ * silently moved on and the feature looked broken.
+ *
+ * `getPermissionsAsync()` gives us `canAskAgain`, which is the difference:
+ *   canAskAgain === false  →  the alert is spent; send them to iOS Settings.
+ *
+ * Hence the three-way return. Callers MUST handle 'blocked' by offering
+ * `Linking.openSettings()` — returning a bare boolean here is what caused the
+ * bug, and collapsing 'blocked' back into `false` anywhere would recreate it.
+ */
+export async function requestNotificationPermission(): Promise<NotificationPermission> {
+  const { status: existing, canAskAgain } = await Notifications.getPermissionsAsync();
+  if (existing === 'granted') return 'granted';
+
+  // Asked before, answered no → iOS is done asking. Do not pretend otherwise.
+  if (!canAskAgain) return 'blocked';
+
   const { status } = await Notifications.requestPermissionsAsync();
-  return status === 'granted';
+  return status === 'granted' ? 'granted' : 'denied';
 }
 
 // ── Daily reflections ─────────────────────────────────────────────────────────

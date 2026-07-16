@@ -391,6 +391,21 @@ export default function ProfiloScreen() {
     });
   }, []));
 
+  // iOS only ever presents the notification permission alert once. If it was
+  // already denied, requestNotificationPermission() comes back 'blocked' and no
+  // dialog will ever appear again — so the toggle would just flick back off with
+  // no explanation. Send them to iOS Settings instead of failing silently.
+  const explainBlocked = () => {
+    Alert.alert(
+      t('Notifications are turned off'),
+      t('Notifications for Symponia are turned off in iOS Settings, so iOS will not ask again. You can turn them on there whenever you like.'),
+      [
+        { text: t('Not now'), style: 'cancel' },
+        { text: t('Open Settings'), onPress: () => Linking.openSettings() },
+      ],
+    );
+  };
+
   const toggleNotif = async (
     type: 'daily' | 'weekly' | 'monthly',
     current: boolean,
@@ -410,8 +425,9 @@ export default function ProfiloScreen() {
             {
               text: t('Yes, please'),
               onPress: async () => {
-                const granted = await requestNotificationPermission();
-                if (!granted) return;
+                const result = await requestNotificationPermission();
+                if (result === 'blocked') { explainBlocked(); return; }
+                if (result !== 'granted') return;
                 setter(true);
                 AsyncStorage.setItem('symponia_notif_daily', 'true');
                 scheduler(true);
@@ -421,8 +437,9 @@ export default function ProfiloScreen() {
         );
         return;
       }
-      const granted = await requestNotificationPermission();
-      if (!granted) return;
+      const result = await requestNotificationPermission();
+      if (result === 'blocked') { explainBlocked(); return; }
+      if (result !== 'granted') return;
     }
     setter(next);
     AsyncStorage.setItem(`symponia_notif_${type}`, String(next));
