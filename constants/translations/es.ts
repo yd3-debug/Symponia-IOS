@@ -4,6 +4,10 @@
 // from the English layout (Spanish runs ~20% longer).
 
 const es: Record<string, string> = {
+  // ── Sign-in / landing (added with signin.tsx localization) ──
+  'create your account': 'crea tu cuenta',
+  'incorrect email or password': 'correo o contraseña incorrectos',
+  'enter a valid email address': 'introduce un correo electrónico válido',
   // ── Onboarding: language / welcome ──
   'choose your\nlanguage': 'elige tu\nidioma',
   'Symponia will speak with you in this language': 'Symponia hablará contigo en este idioma',

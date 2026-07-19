@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import { Text } from '@/components/Text';
-import { t } from '@/constants/i18n';
+import { t, useT } from '@/constants/i18n';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -28,6 +28,10 @@ type Mode = 'landing' | 'signin' | 'forgot';
 export default function SignInScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
+  // Re-render when the language changes — the user picks their language in
+  // onboarding and can land back here (back navigation, sign-out), so this
+  // screen must follow the choice like every other.
+  useT();
 
   const [mode, setMode] = useState<Mode>('landing');
   const [email, setEmail] = useState('');
@@ -64,7 +68,7 @@ export default function SignInScreen() {
     if (authError) {
       setError(
         authError.message.toLowerCase().includes('invalid login')
-          ? 'incorrect email or password'
+          ? t('incorrect email or password')
           : authError.message,
       );
       return;
@@ -75,7 +79,7 @@ export default function SignInScreen() {
   };
 
   const sendReset = async () => {
-    if (!email.includes('@')) { setError('enter a valid email address'); return; }
+    if (!email.includes('@')) { setError(t('enter a valid email address')); return; }
     Keyboard.dismiss();
     setIsLoading(true);
     setError('');
@@ -120,9 +124,9 @@ export default function SignInScreen() {
             <View style={styles.brandCenter}>
               <Image source={LOGO} style={styles.logoLarge} contentFit="contain" />
               <Text style={[styles.appName, { color: colors.cyan }]}>SYMPONIA</Text>
-              <Text style={[styles.tagline, { color: colors.textSub }]}>a resonant presence</Text>
+              <Text style={[styles.tagline, { color: colors.textSub }]}>{t('a resonant presence')}</Text>
               <Text style={[styles.bodyText, { color: colors.textDim }]}>
-                {'An AI shaped by your inner world.\nEvery session listens. Nothing is generic.'}
+                {t('An AI shaped by your inner world.\nEvery session listens. Nothing is generic.')}
               </Text>
             </View>
 
@@ -135,7 +139,7 @@ export default function SignInScreen() {
                 }}
                 activeOpacity={0.75}
               >
-                <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>create account</Text>
+                <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>{t('create account')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -145,7 +149,7 @@ export default function SignInScreen() {
               >
                 <Text style={[styles.secondaryBtnText, { color: colors.textSub }]}>
                   {t('already a member?')}{'  '}
-                  <Text style={{ color: colors.cyan }}>sign in</Text>
+                  <Text style={{ color: colors.cyan }}>{t('sign in')}</Text>
                 </Text>
               </TouchableOpacity>
             </View>
@@ -161,12 +165,12 @@ export default function SignInScreen() {
             style={styles.formWrap}
           >
             <TouchableOpacity onPress={() => reset('landing')} activeOpacity={0.65} style={styles.backBtn}>
-              <Text style={[styles.backText, { color: colors.textDim }]}>← back</Text>
+              <Text style={[styles.backText, { color: colors.textDim }]}>{t('← back')}</Text>
             </TouchableOpacity>
 
             <View style={styles.formHeader}>
-              <Text style={[styles.formTitle, { color: colors.text }]}>{'welcome\nback'}</Text>
-              <Text style={[styles.formHint, { color: colors.textDim }]}>continue where you left off</Text>
+              <Text style={[styles.formTitle, { color: colors.text }]}>{t('welcome\nback')}</Text>
+              <Text style={[styles.formHint, { color: colors.textDim }]}>{t('continue where you left off')}</Text>
             </View>
 
             <View style={styles.form}>
@@ -208,7 +212,7 @@ export default function SignInScreen() {
                   style={styles.eyeBtn}
                 >
                   <Text style={[styles.eyeText, { color: colors.textDim }]}>
-                    {showPassword ? 'hide' : 'show'}
+                    {showPassword ? t('hide') : t('show')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -219,7 +223,7 @@ export default function SignInScreen() {
                 activeOpacity={0.65}
                 style={styles.forgotBtn}
               >
-                <Text style={[styles.forgotText, { color: colors.cyan }]}>forgot password?</Text>
+                <Text style={[styles.forgotText, { color: colors.cyan }]}>{t('forgot password?')}</Text>
               </TouchableOpacity>
 
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -238,7 +242,7 @@ export default function SignInScreen() {
                 activeOpacity={0.75}
               >
                 <Text style={[styles.primaryBtnText, { color: canSignIn ? colors.cyan : colors.textDim }]}>
-                  {isLoading ? 'signing in…' : 'sign in'}
+                  {isLoading ? t('signing in…') : t('sign in')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -252,7 +256,7 @@ export default function SignInScreen() {
                   router.push('/onboarding');
                 }}
               >
-                create your account
+                {t('create your account')}
               </Text>
             </Text>
 
@@ -272,15 +276,15 @@ export default function SignInScreen() {
             style={styles.formWrap}
           >
             <TouchableOpacity onPress={() => reset('signin')} activeOpacity={0.65} style={styles.backBtn}>
-              <Text style={[styles.backText, { color: colors.textDim }]}>← back</Text>
+              <Text style={[styles.backText, { color: colors.textDim }]}>{t('← back')}</Text>
             </TouchableOpacity>
 
             <View style={styles.formHeader}>
-              <Text style={[styles.formTitle, { color: colors.text }]}>{'reset\npassword'}</Text>
+              <Text style={[styles.formTitle, { color: colors.text }]}>{t('reset\npassword')}</Text>
               <Text style={[styles.formHint, { color: colors.textDim }]}>
                 {forgotSent
-                  ? 'check your inbox — and your junk folder just in case'
-                  : 'enter your email and we will send a reset link'}
+                  ? t('check your inbox — and your junk folder just in case')
+                  : t('enter your email and we will send a reset link')}
               </Text>
             </View>
 
@@ -315,7 +319,7 @@ export default function SignInScreen() {
                   activeOpacity={0.75}
                 >
                   <Text style={[styles.primaryBtnText, { color: email.includes('@') && !isLoading ? colors.cyan : colors.textDim }]}>
-                    {isLoading ? 'sending…' : 'send reset link'}
+                    {isLoading ? t('sending…') : t('send reset link')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -327,7 +331,7 @@ export default function SignInScreen() {
                   <Text style={[styles.sentIcon, { color: colors.cyan }]}>◎</Text>
                   <Text style={[styles.sentText, { color: colors.text }]}>
                     {t('reset link sent to')}{'\n'}{email.trim().toLowerCase()}{'\n\n'}
-                    <Text style={{ fontSize: 12 }}>if you don't see it, check your junk folder.</Text>
+                    <Text style={{ fontSize: 12 }}>{t("if you don't see it, check your junk folder.")}</Text>
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -335,7 +339,7 @@ export default function SignInScreen() {
                   style={[styles.primaryBtn, { backgroundColor: colors.cyanDim, borderColor: colors.cyanBorder }]}
                   activeOpacity={0.75}
                 >
-                  <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>back to sign in</Text>
+                  <Text style={[styles.primaryBtnText, { color: colors.cyan }]}>{t('back to sign in')}</Text>
                 </TouchableOpacity>
               </Animated.View>
             )}

@@ -3,6 +3,10 @@
 // German phrasing rather than copied from the English layout.
 
 const de: Record<string, string> = {
+  // ── Sign-in / landing (added with signin.tsx localization) ──
+  'create your account': 'erstelle dein Konto',
+  'incorrect email or password': 'E-Mail oder Passwort falsch',
+  'enter a valid email address': 'gib eine gültige E-Mail-Adresse ein',
   // ── Language / welcome ──
   'choose your\nlanguage': 'wähle deine\nSprache',
   'Symponia will speak with you in this language': 'Symponia spricht in dieser Sprache mit dir',

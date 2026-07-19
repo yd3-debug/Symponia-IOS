@@ -2,6 +2,10 @@
 // Missing/mistyped keys fall back to English. Line breaks placed to suit Portuguese.
 
 const pt: Record<string, string> = {
+  // ── Sign-in / landing (added with signin.tsx localization) ──
+  'create your account': 'crie sua conta',
+  'incorrect email or password': 'e-mail ou senha incorretos',
+  'enter a valid email address': 'digite um e-mail válido',
   // ── Language / welcome ──
   'choose your\nlanguage': 'escolha seu\nidioma',
   'Symponia will speak with you in this language': 'A Symponia vai falar com você neste idioma',

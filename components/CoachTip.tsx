@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Dimensions, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Platform, Pressable, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from '@/components/Text';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -58,7 +58,13 @@ export function CoachTips({ tipKey, steps, onClose }: {
     if (!t || typeof t.measureInWindow !== 'function') { setRect(null); return; }
     const id = setTimeout(() => {
       t.measureInWindow((x: number, y: number, w: number, h: number) => {
-        if (w > 0 || h > 0) setRect({ x, y, w, h });
+        // Only anchor to targets that are actually visible. A target below the
+        // fold (the archetype card sits deep in the settings scroll) used to
+        // push the bubble — and its skip/"got it" buttons — off-screen, leaving
+        // just the scrim: a grey, untappable page. Off-screen ⇒ fall back to a
+        // centred bubble instead.
+        const onScreen = y < SCREEN_H && y + h > 0;
+        if ((w > 0 || h > 0) && onScreen) setRect({ x, y, w, h });
         else setRect(null);
       });
     }, 60);
@@ -85,6 +91,12 @@ export function CoachTips({ tipKey, steps, onClose }: {
   } else {
     bubbleTop = SCREEN_H / 2 - 90;
   }
+  // Belt and braces: whatever the anchor said, the bubble must stay on screen —
+  // it carries the only controls that can dismiss the scrim.
+  bubbleTop = Math.min(
+    Math.max(bubbleTop, insets.top + 12),
+    SCREEN_H - BUB_H - Math.max(insets.bottom, 16),
+  );
 
   const bubbleBg = isDark ? '#171326' : '#FFFFFF';
   const bodyColor = isDark ? colors.textSub : '#33403E';
@@ -95,7 +107,17 @@ export function CoachTips({ tipKey, steps, onClose }: {
         entering={FadeIn.duration(220)}
         style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.40)' }]}
         pointerEvents="auto"
-      />
+      >
+        {/* Tapping the scrim dismisses the tip (and marks it seen). This is the
+            escape hatch that guarantees no tip can ever trap the user, even if
+            a future layout change moves a target somewhere unexpected. */}
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={finish}
+          accessibilityRole="button"
+          accessibilityLabel="dismiss tip"
+        />
+      </Animated.View>
 
       {rect && (
         <View

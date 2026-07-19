@@ -3,6 +3,10 @@
 // Russian phrasing rather than copied from the English layout.
 
 const ru: Record<string, string> = {
+  // ── Sign-in / landing (added with signin.tsx localization) ──
+  'create your account': 'создайте свой аккаунт',
+  'incorrect email or password': 'неверная почта или пароль',
+  'enter a valid email address': 'введите корректный адрес почты',
   // ── Language / welcome ──
   'choose your\nlanguage': 'выбери\nсвой язык',
   'Symponia will speak with you in this language': 'Symponia будет говорить с тобой на этом языке',

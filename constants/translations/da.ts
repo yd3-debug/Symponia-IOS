@@ -2,6 +2,10 @@
 // Missing/mistyped keys fall back to English.
 
 const da: Record<string, string> = {
+  // ── Sign-in / landing (added with signin.tsx localization) ──
+  'create your account': 'opret din konto',
+  'incorrect email or password': 'forkert e-mail eller adgangskode',
+  'enter a valid email address': 'indtast en gyldig e-mailadresse',
   // ── Language / welcome ──
   'choose your\nlanguage': 'vælg dit\nsprog',
   'Symponia will speak with you in this language': 'Symponia taler med dig på dette sprog',

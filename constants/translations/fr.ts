@@ -2,6 +2,10 @@
 // Missing/mistyped keys fall back to English. Line breaks suit French phrasing.
 
 const fr: Record<string, string> = {
+  // ── Sign-in / landing (added with signin.tsx localization) ──
+  'create your account': 'créez votre compte',
+  'incorrect email or password': 'e-mail ou mot de passe incorrect',
+  'enter a valid email address': 'saisissez une adresse e-mail valide',
   // ── Language / welcome ──
   'choose your\nlanguage': 'choisis ta\nlangue',
   'Symponia will speak with you in this language': 'Symponia te parlera dans cette langue',

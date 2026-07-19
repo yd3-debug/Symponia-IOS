@@ -671,15 +671,22 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="next"
-          // textContentType is deliberately "password", NOT "newPassword".
-          // "newPassword" (with passwordRules) triggers iOS's Automatic Strong
-          // Password overlay on focus. On iOS 26.x that overlay crashes the app
-          // the instant this field is tapped — reported from a real device on
-          // 26.5.2. "password" still lets a manager autofill and offer to save,
-          // but does not summon the strong-password generator. Do NOT restore
-          // "newPassword"/passwordRules without testing focus on iOS 26+.
-          textContentType="password"
-          autoComplete="password"
+          // AutoFill is fully opted out on BOTH signup password fields.
+          //
+          // History: "newPassword" + passwordRules summoned iOS's Automatic
+          // Strong Password overlay, which crashes on focus on iOS 26.x
+          // (reported from a real device on 26.5.2). Switching to "password"
+          // (v1.0.6) was NOT enough: Apple's heuristic treats any form with two
+          // secure fields as password creation and can raise the same overlay
+          // regardless of the declared content type. textContentType="none"
+          // (RN maps it to the empty UITextContentType) is Apple's documented
+          // way to opt a field out of AutoFill entirely, so the overlay can
+          // never appear here. Trade-off: no save-to-keychain prompt during
+          // signup — sign-in still offers normal autofill. Do NOT restore
+          // "password"/"newPassword"/passwordRules on either field without
+          // testing focus on a real iOS 26+ device.
+          textContentType="none"
+          autoComplete="off"
         />
         <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={8} activeOpacity={0.6} style={styles.eyeBtn}>
           <Text style={[styles.eyeText, { color: colors.textDim }]}>{showPassword ? 'hide' : 'show'}</Text>
@@ -714,8 +721,11 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
           autoCorrect={false}
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
-          textContentType="password"
-          autoComplete="new-password"
+          // Opted out of AutoFill — see the comment on the field above. The
+          // "new-password" hint that lived here was the last remaining trigger
+          // for the crashing iOS 26 strong-password overlay.
+          textContentType="none"
+          autoComplete="off"
         />
         <TouchableOpacity onPress={() => setShowConfirm(v => !v)} hitSlop={8} activeOpacity={0.6} style={styles.eyeBtn}>
           <Text style={[styles.eyeText, { color: colors.textDim }]}>{showConfirm ? 'hide' : 'show'}</Text>
@@ -1342,7 +1352,11 @@ export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
 
-  const [step, setStep] = useState<Step>('welcome');
+  // MUST start at STEPS[0]. This was hardcoded to 'welcome', which silently
+  // skipped the language step for every user — the screen existed, sat first in
+  // STEPS, and was never shown. Deriving the initial value from the array means
+  // reordering STEPS can never strand a step again.
+  const [step, setStep] = useState<Step>(STEPS[0]);
   const [name, setName] = useState('');
   const [gender, setGender] = useState('');
   const [animals, setAnimals] = useState<string[]>([]);
