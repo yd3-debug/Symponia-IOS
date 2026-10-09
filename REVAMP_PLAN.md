@@ -140,9 +140,24 @@ allow a character to float freely over the home screen.
 
 ## Open decisions
 
-- Speech service for the spoken replies: provider, price per reply, and whether
-  it is good in all nine languages. Must be settled before Phase 2, because the
-  Terms promise unlimited use with a published fair-use limit.
+- Spoken replies: **ElevenLabs** (Yekta's choice, 2026-10-09). The voice must
+  feel very natural, and the user picks a woman's or a man's voice. Picture in
+  picture is out.
+  - Price on elevenlabs.io/pricing/api that day: $0.04 per 1,000 characters
+    (about $0.04 per minute of speech) for Flash v2.5 and for v3 Conversational.
+    Multilingual v2 and v3 are $0.08. The free plan is 10-20 thousand
+    characters a month for the whole account: testing only.
+  - Flash v2.5: 32 languages, about 75 ms. v3 Conversational: 70+ languages,
+    about 280 ms, more expressive. Both cover all nine app languages, and one
+    voice keeps its character across languages. Pick between them by ear.
+  - Keep spoken replies short (aim for about 350 characters, roughly 1.4 cents).
+    A 2,000-character reply costs 8 cents.
+  - The key lives only on the server (a Supabase function secret). The server
+    counts characters per user and enforces a monthly cap on spoken minutes;
+    past the cap, fall back to Apple's built-in voice or text.
+  - Before shipping: add ElevenLabs to the privacy policy, the consent screen
+    and Apple's privacy answers; check what ElevenLabs retains; have a native
+    speaker listen to Danish, Swedish and Russian.
 - Speech recognition: settled. `@react-native-voice/voice` removed,
   `expo-speech-recognition` installed, so it is in the first build.
 
