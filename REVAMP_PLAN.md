@@ -242,18 +242,46 @@ profile when a temporary account is linked. Tested with fake accounts inside a
 rolled-back transaction, and the live API still answers the shipped app's
 calls. Not tested: a real sign-up from the App Store build.
 
-Still to do, in this order:
+**Switch on, and checked, 2026-10-09.** "Allow anonymous sign-ins" is enabled.
 
-1. **Supabase switch "Allow anonymous sign-ins"** (Yekta). Until the app code
-   below exists, turning it on gains nothing and lets anyone with the public
-   key create accounts that each carry 10 trial messages.
-2. Abuse protection for temporary accounts: device attestation or captcha, a
-   low sign-in rate limit, and first-session-only limits.
-3. App: sign in silently on first open, show "Before we begin", and offer
+What a temporary account can do (simulated inside the database, rolled back):
+sees only its own profile; cannot give itself credit or a subscription; cannot
+read or change anyone else's data; can add its own consent records but cannot
+forge, edit or delete any; has no access to the usage, voice or self-test
+tables.
+
+Limits in force:
+
+- Supabase: 30 temporary sign-ins per hour per IP address.
+- Database: 50 temporary accounts per rolling 24 hours in total
+  (`app_limits.anon_accounts_per_day`; raise it before any marketing push).
+  Past the ceiling, temporary sign-in fails and the app must offer ordinary
+  sign-in. Email, Apple and Google sign-ups are unaffected.
+- Each account: 10 trial messages; voice 8,000 characters per 30 days.
+
+**What is still exposed.** Inside `oracle`, three paths cost money without
+using a trial message: the translated opening (up to 40 per 30 days), the
+archetype text, and the daily reflection (10 a day). A scripted temporary
+account could spend roughly $2 on them. With the ceiling that is about $100 a
+day at the very worst. The same was already true of email sign-ups, which
+need no confirmation and no captcha. To close it properly:
+
+1. In `oracle`, refuse those three paths for temporary accounts and add a
+   daily budget for all trial spending. Do this in the one planned `oracle`
+   update (streaming, signed replies, crisis detection), not as a hot patch.
+2. Set a monthly spending limit in the Anthropic console (Yekta). It is the
+   backstop for everything above.
+3. Captcha or Apple device attestation on sign-up, before marketing.
+
+Still to build:
+
+1. App: sign in silently on first open, show "Before we begin", and offer
    "shall I keep this for you?" after the first session (link to Apple, Google
-   or email; required at subscription).
-4. Clean up temporary accounts that never return.
-5. `delete-account` and the purchase functions: confirm they behave for an
+   or email; required at subscription). Handle "temporary accounts are paused"
+   by offering ordinary sign-in.
+2. Clean-up of temporary accounts that never return. Needs a decision on how
+   long to keep them, because deleting one deletes that person's animals.
+3. `delete-account` and the purchase functions: confirm they behave for an
    account with no email.
 
 ## After launch
