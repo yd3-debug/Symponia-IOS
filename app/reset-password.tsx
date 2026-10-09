@@ -200,6 +200,16 @@ export default function ResetPasswordScreen() {
                   secureTextEntry={!showPw}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  // No textContentType meant nil → iOS heuristics: two secure
+                  // fields = "new password" form → the Automatic Strong
+                  // Password overlay, which crashes on iOS 26.x. Worse, this
+                  // field autoFocuses, so affected users crashed the moment the
+                  // screen opened. "oneTimeCode" gives the field an explicit
+                  // non-password identity — the strongest suppression we have
+                  // (see the escalation history in onboarding.tsx; plain
+                  // "none" was not enough for a user on 1.0.7).
+                  textContentType="oneTimeCode"
+                  autoComplete="off"
                   autoFocus
                 />
                 <TouchableOpacity onPress={() => setShowPw(v => !v)} hitSlop={8} activeOpacity={0.6} style={styles.eyeBtn}>
@@ -219,6 +229,9 @@ export default function ResetPasswordScreen() {
                 autoCorrect={false}
                 returnKeyType="done"
                 onSubmitEditing={updatePassword}
+                // AutoFill suppressed — see the field above.
+                textContentType="oneTimeCode"
+                autoComplete="off"
               />
 
               {error ? <Text style={styles.errorText}>{error}</Text> : null}

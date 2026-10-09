@@ -655,7 +655,12 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="next"
-        textContentType="username"
+        // "emailAddress", NOT "username". A "username" field is what tells iOS
+        // this form is a login/credential form — it strengthens the heuristic
+        // that drags in the (iOS 26-crashing) password AutoFill machinery for
+        // the secure fields below. "emailAddress" keeps email suggestions
+        // without marking the form as credential entry.
+        textContentType="emailAddress"
         autoComplete="email"
       />
 
@@ -671,21 +676,28 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="next"
-          // AutoFill is fully opted out on BOTH signup password fields.
+          // AutoFill is fully suppressed on BOTH signup password fields.
           //
-          // History: "newPassword" + passwordRules summoned iOS's Automatic
-          // Strong Password overlay, which crashes on focus on iOS 26.x
-          // (reported from a real device on 26.5.2). Switching to "password"
-          // (v1.0.6) was NOT enough: Apple's heuristic treats any form with two
-          // secure fields as password creation and can raise the same overlay
-          // regardless of the declared content type. textContentType="none"
-          // (RN maps it to the empty UITextContentType) is Apple's documented
-          // way to opt a field out of AutoFill entirely, so the overlay can
-          // never appear here. Trade-off: no save-to-keychain prompt during
-          // signup — sign-in still offers normal autofill. Do NOT restore
-          // "password"/"newPassword"/passwordRules on either field without
-          // testing focus on a real iOS 26+ device.
-          textContentType="none"
+          // Escalation history of the iOS 26.x focus crash (real device,
+          // 26.5.2):
+          //   v1.0.2–1.0.5  "newPassword" + passwordRules → crashed (Automatic
+          //                 Strong Password overlay dies on focus).
+          //   v1.0.6        "password" → still crashed (two secure fields make
+          //                 iOS treat the form as password creation anyway).
+          //   v1.0.7        "none" (Apple's documented empty-content-type
+          //                 opt-out) → a user on 1.0.7 STILL reported the
+          //                 crash; heuristics can evidently reclassify an
+          //                 opted-out secure field inside a credential form.
+          //   now           "oneTimeCode" — gives the field an explicit,
+          //                 unambiguous NON-password identity. iOS honors an
+          //                 explicit foreign content type and keeps the entire
+          //                 password/strong-password machinery away. Worst
+          //                 case it offers an SMS-code suggestion, which is
+          //                 harmless. Field stays masked via secureTextEntry.
+          // Do NOT change these two props without testing focus on a real
+          // iOS 26+ device that has iCloud Keychain / a password manager
+          // enabled — the crash only reproduces for those users.
+          textContentType="oneTimeCode"
           autoComplete="off"
         />
         <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={8} activeOpacity={0.6} style={styles.eyeBtn}>
@@ -721,10 +733,9 @@ function LegalStep({ colors, isDark, email, setEmail, password, setPassword, agr
           autoCorrect={false}
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
-          // Opted out of AutoFill — see the comment on the field above. The
-          // "new-password" hint that lived here was the last remaining trigger
-          // for the crashing iOS 26 strong-password overlay.
-          textContentType="none"
+          // AutoFill suppressed — see the escalation history on the field
+          // above. Must stay in lockstep with it.
+          textContentType="oneTimeCode"
           autoComplete="off"
         />
         <TouchableOpacity onPress={() => setShowConfirm(v => !v)} hitSlop={8} activeOpacity={0.6} style={styles.eyeBtn}>
