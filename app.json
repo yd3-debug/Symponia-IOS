@@ -2,7 +2,7 @@
   "expo": {
     "name": "Symponia",
     "slug": "symponia",
-    "version": "1.0.8",
+    "version": "2.0.0",
     "orientation": "portrait",
     "scheme": "symponia",
     "icon": "./Assets/images/icon.png",
@@ -61,7 +61,9 @@
             "useFrameworks": "static"
           }
         }
-      ]
+      ],
+      "expo-audio",
+      "expo-localization"
     ],
     "extra": {
       "router": {},
@@ -70,6 +72,13 @@
       },
       "googleIosClientId": "51163397268-8cu8dbbqk3pjblrvm7lqiu12j9e4kpm6.apps.googleusercontent.com",
       "googleWebClientId": "51163397268-sfj41f6r88ss5niljntq1s2116b1stat.apps.googleusercontent.com"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/f8dcbb94-7850-4283-9bce-550979a54dbf",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     }
   }
 }

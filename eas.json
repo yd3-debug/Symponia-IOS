@@ -18,6 +18,14 @@
       "distribution": "store",
       "ios": {
         "autoIncrement": true
+      },
+      "channel": "production"
+    },
+    "revamp": {
+      "distribution": "store",
+      "channel": "revamp",
+      "ios": {
+        "autoIncrement": true
       }
     }
   },

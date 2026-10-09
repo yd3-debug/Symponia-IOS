@@ -1,0 +1,111 @@
+# Symponia revamp plan
+
+Branch: `revamp`. App version on this branch: 2.0.0. Started 2026-10-09.
+
+The mission does not change: shadow work through seven animals, depth psychology,
+not therapy. What changes is how you do it: you speak with a presence instead of
+typing into a chat.
+
+## Standing rules
+
+1. **Compact, smooth, efficient.** Every visual or feature choice states its size
+   and performance cost. Images are compressed (WebP) and sized for the largest
+   iPhone, no larger. Rarely seen art loads from the network and is cached.
+   Animation moves, scales and fades a few drawings on the UI thread; no video,
+   no long frame sequences. Animation pauses off-screen and calms down in Low
+   Power Mode and Reduce Motion.
+2. **Few native modules.** Each one adds size and forces a new build.
+3. **Security is checked every phase** (see the checklist at the end).
+4. **Nothing is promised on the website or App Store before it ships.**
+
+## Look and feel (decided)
+
+- Light mode on cream sketchbook paper; coloured-pencil illustration.
+- **The cloud** is the guide: cute, colourful, soft. Four states: idle,
+  listening, thinking, speaking. No dashes under it (they read as rain).
+- **The animals are realistic**, in their real colours, calm and neutral, never
+  cute or magical. The method depends on an honest reaction to the real animal,
+  most of all the seventh. Face portraits in the picker; whole-body drawings on
+  the larger reading screen.
+- **Home screen B:** the cloud over pencil hills, one large Liquid Glass card
+  holding today's line and the Talk / Write buttons, a glass tab bar.
+- **Animal picker:** round bubbles. Real Liquid Glass only on the selected
+  animals, the Continue button and the tab bar; the other bubbles are a drawn
+  glass ring, because dozens of real glass elements may stutter on older phones.
+- Liquid Glass needs iOS 26. Older iPhones get a frosted blur (`expo-blur`).
+
+## How changes reach the phone
+
+Yekta's Mac cannot run the iOS Simulator. So:
+
+- **Browser preview** (`npx expo export --platform web`) for screens and motion.
+  Voice, purchases and real Liquid Glass do not work there.
+- **One TestFlight build** on the `revamp` update channel (`eas build --profile
+  revamp --platform ios`). After it is installed, JavaScript and image changes
+  are sent over the air with `eas update --channel revamp`; no rebuild.
+- A new build is needed only when a native module is added.
+
+## Phases
+
+| Phase | Builds | Done when |
+|---|---|---|
+| 0. Foundations | Update channel, native modules for build 1, analytics, crisis-safety screen | The app on Yekta's phone updates without a rebuild |
+| 1. The cloud | Floating cloud, four states, home screen B | New home screen on the phone |
+| 2. Voice session | Speak, streamed reply, spoken reply, captions, text fallback | A real spoken conversation |
+| 3. Onboarding | Cloud-guided animal picker by voice or text; sign-up after the reveal | New first run, fewer steps |
+| 4. Memory and daily loop | Server-side memory, an animal for each day, personal notifications, weekly summary | It remembers yesterday |
+| 5. Pricing and review | Free first session, free daily moment, annual plan, Apple compliance check | A build ready to submit |
+| 6. Launch, then website | Store listing, screenshots, website, marketing content | Live |
+
+Later, as its own build: a home-screen widget showing the cloud. iOS does not
+allow a character to float freely over the home screen.
+
+## Phase 0 status
+
+- [x] 1.0.8 crash fix committed on `main` (not yet shipped)
+- [x] `revamp` branch, version 2.0.0
+- [x] Over-the-air updates configured (`expo-updates`, channel `revamp`)
+- [x] Native modules for build 1 installed: `expo-updates`, `expo-glass-effect`,
+      `expo-image`, `expo-audio`, `expo-speech`, plus what analytics needs
+- [x] Browser preview confirmed working
+- [ ] Build 1 to TestFlight (needs Yekta's go-ahead)
+- [ ] Analytics wired (needs a PostHog project key)
+- [ ] Crisis-safety flow: server-side detection and a screen with helplines
+- [ ] Measure the real download size of build 1 as the baseline
+
+## Open decisions
+
+- Speech service for the spoken replies: provider, price per reply, and whether
+  it is good in all nine languages. Must be settled before Phase 2, because the
+  Terms promise unlimited use with a published fair-use limit.
+- Speech recognition library: `@react-native-voice/voice` is installed but
+  unused and poorly maintained. Decide in Phase 2 whether to replace it, which
+  would mean a second build.
+
+## Security checklist (run every phase)
+
+- No secrets in the repo or the app bundle; only the public Supabase key ships.
+- Supabase security advisors clean, or every finding understood.
+- Every new table has Row Level Security with own-row policies.
+- Every new server function checks the caller's login itself.
+- Any new company that receives user data (speech, analytics) is added to the
+  privacy policy, the consent screen and Apple's privacy answers before it ships.
+- Voice audio: decide and state whether it is stored. Default is not stored.
+- `npm audit` reviewed; build-tool findings are noted, shipped-code findings fixed.
+
+Known open items on 2026-10-09:
+
+- Leaked-password protection is off in Supabase Auth (one toggle in the dashboard).
+- `pg_net` extension sits in the `public` schema (low risk, advisory).
+- `oracle` has gateway JWT checking off and checks the login in code instead.
+  This is deliberate; keep it that way and keep the check.
+- `npm audit` reports 54 findings (59 before the patch updates on this branch).
+  Almost all are in build tooling that never ships: Metro, Expo CLI, Jest,
+  `shell-quote`, `xmldom`, `node-forge`, `fast-uri`. Two flagged packages are
+  inside the app bundle, and in both the flawed code path is not used:
+  `nanoid` (React Navigation calls it with fixed sizes; the bug needs a negative
+  size) and `ws` (pulled in by Supabase realtime for Node; React Native uses the
+  phone's own WebSocket, and the app does not use realtime). They clear with
+  Expo SDK and Supabase upgrades; do not run `npm audit fix --force`.
+- Trial token decrement in `oracle` is not atomic (a user could squeeze a few
+  extra free messages). Low impact.
