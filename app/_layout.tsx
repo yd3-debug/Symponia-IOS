@@ -13,7 +13,7 @@ import * as Notifications from 'expo-notifications';
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 async function migrateStaleNotifications() {
@@ -279,7 +279,12 @@ function AppShell() {
       // 2. Normal session check
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        router.replace('/signin');
+        // The revamp preview screen (/lab) uses no account and no network. Let it
+        // through in the browser preview and in development only; in a store
+        // build this is always false, so /lab still lands on sign-in.
+        const onLab =
+          (__DEV__ || Platform.OS === 'web') && !!initialUrl && /\/lab(\/|\?|#|$)/.test(initialUrl);
+        if (!onLab) router.replace('/signin');
       } else {
         AsyncStorage.setItem('symponia_user_id', session.user.id);
         await ensureProfileRow(session.user);

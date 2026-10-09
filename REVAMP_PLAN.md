@@ -68,10 +68,37 @@ allow a character to float freely over the home screen.
 - [x] Native modules for build 1 installed: `expo-updates`, `expo-glass-effect`,
       `expo-image`, `expo-audio`, `expo-speech`, plus what analytics needs
 - [x] Browser preview confirmed working
-- [ ] Build 1 to TestFlight (needs Yekta's go-ahead)
+- [ ] Build 1 to TestFlight. Yekta must run it: EAS builds are blocked from the
+      assistant's session as production deploys.
+- [ ] 1.0.8 crash fix built and sent to TestFlight (same: Yekta runs it)
 - [ ] Analytics wired (needs a PostHog project key)
 - [ ] Crisis-safety flow: server-side detection and a screen with helplines
 - [ ] Measure the real download size of build 1 as the baseline
+
+## Phase 1 status
+
+- [x] Cloud artwork: six poses of one cloud from a single sheet, so they match.
+      `Assets/revamp/`, 772 KB for the whole home screen.
+- [x] `components/revamp/Cloud.tsx`: float, sway, breathing, blink, speaking
+      mouth, thinking stars, listening lean; honours Reduce Motion.
+- [x] `components/revamp/Glass.tsx`: real Liquid Glass on iOS 26+, a translucent
+      panel elsewhere (blur only on large panels).
+- [x] `components/revamp/Paper.tsx`: cream page, grain tile, hills, sun, stars.
+- [x] `app/lab.tsx`: home screen B as a preview at `/lab` (browser preview and
+      development only). Checked at 375x667, 393x852 and 440x956.
+- [ ] Replace the real home tab with this screen and wire Talk / Write.
+- [ ] Check real Liquid Glass and frame rate on a phone (needs build 1).
+- [ ] The label and heading are placeholder copy until memory exists (Phase 4).
+
+## Supabase findings (2026-10-09, dashboard read only)
+
+- The Symponia organisation is on the **Free plan**. That means no automatic
+  database backups, and "Prevent use of leaked passwords" cannot be switched
+  on (Pro only).
+- Confirm email is off and Captcha is off. Anyone can create accounts in bulk
+  and each gets the free trial messages, paid for by the Anthropic key. Fine at
+  today's scale; close before any marketing push.
+- Secure email change and secure password change are off.
 
 ## Open decisions
 
