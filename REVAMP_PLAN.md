@@ -110,10 +110,15 @@ allow a character to float freely over the home screen.
 
 ## Phase 1 status
 
-- [x] Cloud artwork: six poses of one cloud from a single sheet, so they match.
-      `Assets/revamp/`, 772 KB for the whole home screen.
-- [x] `components/revamp/Cloud.tsx`: float, sway, breathing, blink, speaking
-      mouth, thinking stars, listening lean; honours Reduce Motion.
+- [x] Cloud artwork: one body drawing plus five soft-edged face patches cut
+      from a single sheet, so they match. `Assets/revamp/` is 404 KB for the
+      whole home screen.
+- [x] `components/revamp/Cloud.tsx`: drift, sway, breathing, blink, speaking
+      mouth, thinking stars, listening lean; honours Reduce Motion. All
+      continuous motion comes from one 60-second clock (see the note in the
+      file). Measured in headless Chrome over 22 s: 60 fps, largest step
+      between frames 0.65 px, no jumps. The first version jumped 7 px every
+      5 s because `withRepeat(withSequence(...))` restarts from its first value.
 - [x] `components/revamp/Glass.tsx`: real Liquid Glass on iOS 26+, a translucent
       panel elsewhere (blur only on large panels).
 - [x] `components/revamp/Paper.tsx`: cream page, grain tile, hills, sun, stars.

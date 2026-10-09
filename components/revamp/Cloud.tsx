@@ -15,32 +15,44 @@ import Animated, {
 
 // The cloud: Symponia's guide.
 //
-// Six pencil drawings of the same cloud (Assets/revamp/cloud_*.webp, ~97 KB
-// each) differing only in the face. All six are mounted once and cross-shown by
-// opacity, so a change of expression never decodes an image or flashes. Each
-// drawing's hatching is slightly different, which is what gives the pencil line
-// its hand-drawn shimmer when the face changes.
+// ONE BODY, FIVE FACES. The cloud is a single pencil drawing (cloud_idle.webp).
+// Every other expression is a small soft-edged patch of just the face, laid over
+// that body. An earlier version swapped six whole drawings, so each blink
+// replaced the entire pencil texture for a moment, which read as a flicker.
+// Patches change only the face, and cost 208 KB in total instead of 578 KB.
 //
-// Everything that moves continuously (float, sway, breathing) is a transform
-// driven by Reanimated on the UI thread: no layout, no re-render, 60 fps on old
-// phones. The only JS-thread work is swapping the face a few times a second.
+// ONE CLOCK. All continuous motion is computed from a single value that runs
+// 0 -> 1 over a minute and repeats. Each movement is a whole number of sine
+// waves inside that minute, so when the clock wraps from 1 back to 0 every
+// sine is back where it started and nothing jumps. The waves have different
+// lengths, so the combined drift only repeats once a minute and never looks
+// like a loop. (Do not rebuild this from withRepeat(withSequence(...)) without
+// `reverse`: Reanimated restarts each repeat from the value the animation
+// FIRST started at, which made the cloud snap back to centre every 5 seconds.)
 //
-// Reduce Motion: floating and swaying stop; the face still changes, because
-// that is information (it is listening, it is speaking), not decoration.
+// It all runs on the UI thread as a transform: no layout, no re-render.
+//
+// Reduce Motion, or `paused`: the drift eases to rest. The face still changes,
+// because that is information (it is listening, it is speaking), not decoration.
 
 export type CloudState = 'idle' | 'listening' | 'thinking' | 'speaking';
-type Frame = 'idle' | 'blink' | 'listening' | 'thinking' | 'speak_a' | 'speak_b';
+type Face = 'idle' | 'blink' | 'listening' | 'thinking' | 'speak_a' | 'speak_b';
 
-const FRAMES: Record<Frame, number> = {
-  idle: require('@/Assets/revamp/cloud_idle.webp'),
-  blink: require('@/Assets/revamp/cloud_blink.webp'),
-  listening: require('@/Assets/revamp/cloud_listening.webp'),
-  thinking: require('@/Assets/revamp/cloud_thinking.webp'),
-  speak_a: require('@/Assets/revamp/cloud_speak_a.webp'),
-  speak_b: require('@/Assets/revamp/cloud_speak_b.webp'),
+const BODY = require('@/Assets/revamp/cloud_idle.webp');
+const FACES: Record<Exclude<Face, 'idle'>, number> = {
+  blink: require('@/Assets/revamp/face_blink.webp'),
+  listening: require('@/Assets/revamp/face_listening.webp'),
+  thinking: require('@/Assets/revamp/face_thinking.webp'),
+  speak_a: require('@/Assets/revamp/face_speak_a.webp'),
+  speak_b: require('@/Assets/revamp/face_speak_b.webp'),
 };
-const FRAME_KEYS = Object.keys(FRAMES) as Frame[];
-const ASPECT = 493 / 660;
+const FACE_KEYS = Object.keys(FACES) as Exclude<Face, 'idle'>[];
+
+// The body drawing is 660 x 493; the face patches were cut from this box in it.
+const BODY_W = 660;
+const BODY_H = 493;
+const FACE_BOX = { x: 150, y: 150, w: 360, h: 216 };
+const ASPECT = BODY_H / BODY_W;
 
 const STARS = [
   require('@/Assets/revamp/star_peach.webp'),
@@ -56,7 +68,8 @@ const POSE: Record<CloudState, { float: number; tilt: number; scale: number }> =
   speaking: { float: 4, tilt: 0, scale: 1.02 },
 };
 
-const ease = Easing.inOut(Easing.sin);
+const LOOP_MS = 60_000;
+const TAU = Math.PI * 2;
 
 export function Cloud({
   state = 'idle',
@@ -72,45 +85,33 @@ export function Cloud({
   const still = paused || reduceMotion;
   const height = width * ASPECT;
 
-  const [frame, setFrame] = useState<Frame>('idle');
+  const [face, setFace] = useState<Face>('idle');
 
-  // -1..1 oscillators on different periods, so the motion never visibly loops.
-  const bob = useSharedValue(0);
-  const sway = useSharedValue(0);
-  const breath = useSharedValue(0);
+  const clock = useSharedValue(0);
+  // 0 = at rest, 1 = drifting. Eased, so starting and stopping are gentle.
+  const drift = useSharedValue(0);
   // The pose eases between states instead of snapping.
   const float = useSharedValue(POSE.idle.float);
   const tilt = useSharedValue(0);
   const scale = useSharedValue(1);
-  // A tiny pulse each time the mouth opens while speaking.
+  // A tiny pulse each time the mouth opens wide while speaking.
   const pulse = useSharedValue(0);
 
   useEffect(() => {
     if (still) {
-      [bob, sway, breath].forEach((v) => {
-        cancelAnimation(v);
-        v.value = withTiming(0, { duration: 300 });
+      // Ease to rest first, then stop the clock so nothing runs off-screen.
+      drift.value = withTiming(0, { duration: 500, easing: Easing.out(Easing.cubic) }, (finished) => {
+        if (finished) cancelAnimation(clock);
       });
       return;
     }
-    bob.value = withRepeat(
-      withSequence(withTiming(1, { duration: 2600, easing: ease }), withTiming(-1, { duration: 2600, easing: ease })),
-      -1,
-    );
-    sway.value = withRepeat(
-      withSequence(withTiming(1, { duration: 4300, easing: ease }), withTiming(-1, { duration: 4300, easing: ease })),
-      -1,
-    );
-    breath.value = withRepeat(
-      withSequence(withTiming(1, { duration: 1900, easing: ease }), withTiming(0, { duration: 1900, easing: ease })),
-      -1,
-    );
-    return () => {
-      cancelAnimation(bob);
-      cancelAnimation(sway);
-      cancelAnimation(breath);
-    };
-  }, [still, bob, sway, breath]);
+    // Safe to restart from 0: with drift at 0 the cloud is at rest wherever the
+    // clock is, so there is nothing to jump.
+    clock.value = 0;
+    clock.value = withRepeat(withTiming(1, { duration: LOOP_MS, easing: Easing.linear }), -1, false);
+    drift.value = withTiming(1, { duration: 1200, easing: Easing.out(Easing.cubic) });
+    return () => cancelAnimation(clock);
+  }, [still, clock, drift]);
 
   useEffect(() => {
     const p = POSE[state];
@@ -132,8 +133,8 @@ export function Cloud({
       const tick = () => {
         if (!alive) return;
         const r = Math.random();
-        const next: Frame = r < 0.42 ? 'speak_b' : r < 0.8 ? 'speak_a' : 'idle';
-        setFrame(next);
+        const next: Face = r < 0.42 ? 'speak_b' : r < 0.8 ? 'speak_a' : 'idle';
+        setFace(next);
         if (next === 'speak_b') {
           pulse.value = withSequence(withTiming(1, { duration: 70 }), withTiming(0, { duration: 160 }));
         }
@@ -141,16 +142,16 @@ export function Cloud({
       };
       tick();
     } else if (state === 'thinking') {
-      setFrame('thinking');
+      setFace('thinking');
     } else {
-      const open: Frame = state === 'listening' ? 'listening' : 'idle';
-      setFrame(open);
+      const open: Face = state === 'listening' ? 'listening' : 'idle';
+      setFace(open);
       const blink = () => {
         if (!alive) return;
-        setFrame('blink');
+        setFace('blink');
         timer = setTimeout(() => {
           if (!alive) return;
-          setFrame(open);
+          setFace(open);
           timer = setTimeout(blink, 2600 + Math.random() * 3200);
         }, 130);
       };
@@ -162,29 +163,53 @@ export function Cloud({
     };
   }, [state, paused, pulse]);
 
-  const body = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: bob.value * float.value },
-      { rotate: `${tilt.value + sway.value * 1.2}deg` },
-      { scale: scale.value * (1 + breath.value * 0.018 + pulse.value * 0.022) },
-    ],
-  }));
+  // Whole numbers of cycles per minute: 11, 4, 7, 5, 13, 16. See the note above.
+  const body = useAnimatedStyle(() => {
+    const p = clock.value * TAU;
+    const d = drift.value;
+    const y = (Math.sin(p * 11) * 0.78 + Math.sin(p * 4 + 2.1) * 0.3) * float.value * d;
+    const x = Math.sin(p * 7 + 1.3) * float.value * 0.5 * d;
+    const sway = (Math.sin(p * 5 + 0.6) * 1.1 + Math.sin(p * 13) * 0.35) * d;
+    const breath = (Math.sin(p * 16 - 1) + 1) / 2;
+    return {
+      transform: [
+        { translateX: x },
+        { translateY: y },
+        { rotate: `${tilt.value + sway}deg` },
+        { scale: scale.value * (1 + breath * 0.016 * d + pulse.value * 0.022) },
+      ],
+    };
+  });
 
   // The shadow answers the float: higher cloud, smaller and fainter shadow.
-  const shadow = useAnimatedStyle(() => ({
-    opacity: 0.62 + bob.value * 0.16,
-    transform: [{ scaleX: 1 + bob.value * 0.07 }],
-  }));
+  const shadow = useAnimatedStyle(() => {
+    const p = clock.value * TAU;
+    const lift = (Math.sin(p * 11) * 0.78 + Math.sin(p * 4 + 2.1) * 0.3) * drift.value;
+    return {
+      opacity: 0.62 + lift * 0.16,
+      transform: [{ translateX: Math.sin(p * 7 + 1.3) * float.value * 0.5 * drift.value }, { scaleX: 1 + lift * 0.07 }],
+    };
+  });
+
+  const k = width / BODY_W;
 
   return (
     <View style={{ width, height: height + width * 0.2 }} accessible accessibilityRole="image" accessibilityLabel={LABEL[state]}>
       <Animated.View style={[{ width, height }, body]}>
-        {FRAME_KEYS.map((key) => (
+        <Image source={BODY} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} cachePolicy="memory" />
+        {FACE_KEYS.map((key) => (
           <Image
             key={key}
-            source={FRAMES[key]}
-            style={[StyleSheet.absoluteFill, { opacity: key === frame ? 1 : 0 }]}
-            contentFit="contain"
+            source={FACES[key]}
+            style={{
+              position: 'absolute',
+              left: FACE_BOX.x * k,
+              top: FACE_BOX.y * k,
+              width: FACE_BOX.w * k,
+              height: FACE_BOX.h * k,
+              opacity: key === face ? 1 : 0,
+            }}
+            contentFit="fill"
             transition={0}
             cachePolicy="memory"
           />
@@ -228,11 +253,9 @@ function ThinkingStars({ size }: { size: number }) {
 function Star({ source, delay, size, x, y }: { source: number; delay: number; size: number; x: number; y: number }) {
   const t = useSharedValue(0);
   useEffect(() => {
+    // `reverse` makes this a true back-and-forth, so it has no restart to jump at.
     const id = setTimeout(() => {
-      t.value = withRepeat(
-        withSequence(withTiming(1, { duration: 1100, easing: ease }), withTiming(0, { duration: 1100, easing: ease })),
-        -1,
-      );
+      t.value = withRepeat(withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.sin) }), -1, true);
     }, delay);
     return () => {
       clearTimeout(id);
@@ -249,4 +272,3 @@ function Star({ source, delay, size, x, y }: { source: number; delay: number; si
     </Animated.View>
   );
 }
-

@@ -8,7 +8,6 @@ import Animated, {
   useReducedMotion,
   useSharedValue,
   withRepeat,
-  withSequence,
   withTiming,
 } from 'react-native-reanimated';
 
@@ -77,7 +76,8 @@ function Doodle({ source, size, left, top, period, delay = 0 }: { source: number
     if (reduceMotion) return;
     const ease = Easing.inOut(Easing.sin);
     const id = setTimeout(() => {
-      t.value = withRepeat(withSequence(withTiming(1, { duration: period, easing: ease }), withTiming(0, { duration: period, easing: ease })), -1);
+      // `reverse` makes this a true back-and-forth, with no restart to jump at.
+      t.value = withRepeat(withTiming(1, { duration: period, easing: ease }), -1, true);
     }, delay);
     return () => {
       clearTimeout(id);
