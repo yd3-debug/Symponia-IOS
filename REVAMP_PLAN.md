@@ -234,21 +234,27 @@ Open the app, a temporary account is created silently, agree, pick animals,
 first session; then "shall I keep this for you?" links it to Apple, Google or
 email. Required at subscription.
 
-**Blocker found:** `profiles` uses `email` as its primary key and it cannot be
-empty, and the new-user trigger inserts by email. A temporary account has no
-email, so today its creation would fail. **Do not switch on "Allow anonymous
-sign-ins" in Supabase until this is changed.** The change:
+**Database change: done on 2026-10-09**
+(`supabase/migrations/20261009160000_profiles_key_on_user_id.sql`). Profiles
+are now keyed on `user_id`; `email` may be empty and stays unique; the new-user
+trigger inserts by `user_id`; a second trigger copies an email onto the
+profile when a temporary account is linked. Tested with fake accounts inside a
+rolled-back transaction, and the live API still answers the shipped app's
+calls. Not tested: a real sign-up from the App Store build.
 
-- make `user_id` the primary key and required; allow `email` to be empty but
-  keep it unique, so the shipped app's `onConflict: 'email'` still works;
-- rewrite `handle_new_user` to insert by `user_id`;
-- review every function that looks a profile up by email (`verify-receipt`,
-  `apple-notification`, `delete-account`, `stripe-webhook`, `oracle`);
-- then: abuse protection for temporary accounts (device attestation or
-  captcha, first-session-only limits), automatic clean-up of unused ones, and
-  linking on sign-in so nothing is lost.
+Still to do, in this order:
 
-Do it as its own tested step, with the live app's sign-up checked afterwards.
+1. **Supabase switch "Allow anonymous sign-ins"** (Yekta). Until the app code
+   below exists, turning it on gains nothing and lets anyone with the public
+   key create accounts that each carry 10 trial messages.
+2. Abuse protection for temporary accounts: device attestation or captcha, a
+   low sign-in rate limit, and first-session-only limits.
+3. App: sign in silently on first open, show "Before we begin", and offer
+   "shall I keep this for you?" after the first session (link to Apple, Google
+   or email; required at subscription).
+4. Clean up temporary accounts that never return.
+5. `delete-account` and the purchase functions: confirm they behave for an
+   account with no email.
 
 ## After launch
 
