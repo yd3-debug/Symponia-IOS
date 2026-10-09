@@ -152,9 +152,26 @@ allow a character to float freely over the home screen.
   into all nine languages.
 - `services/voice.ts`: the answer, cached on the device and mirrored to the
   profile. `null` = not asked, `false` = types.
-- `supabase/migrations/20261009120000_add_voice_prefs.sql`: **not applied**.
-  Apply with Phase 2; the server must refuse to make speech unless
-  `voice_enabled` is true.
+- `supabase/migrations/20261009120000_add_voice_prefs.sql`: **applied to the
+  live database on 2026-10-09** (additive: two profile columns, a usage table
+  and a self-test token table, the last two service-role only).
+- `supabase/functions/speak`: **deployed 2026-10-09**. Signed-in people only;
+  refuses without AI consent and voice consent; voice comes from the profile;
+  1,200 characters per reply; 120,000 characters per 30 days for subscribers,
+  8,000 on the trial, 12,000 per hour; fails closed if the meter is down.
+  Nothing in the shipped app calls it yet.
+- Self-test (2026-10-09): the key is accepted, and unauthenticated calls and a
+  reused token are refused with 401. **Both voices were refused with 402:
+  "Free users cannot use library voices via the API."** A paid ElevenLabs plan
+  (Starter or above) is needed before the cloud can speak in these voices.
+- To re-run the self-test: insert a random token with a short expiry into
+  `voice_selftest_tokens`, then POST to the function with the public key as
+  the bearer and the token in the `x-voice-selftest` header.
+- Known gap: the app supplies the text to speak. Before release, have oracle
+  sign its replies and have `speak` verify the signature, so the voice can only
+  read what the server wrote.
+- ElevenLabs keeps request history by default (zero-retention mode is for
+  enterprise plans only). Say so in the privacy policy.
 - Still to do before voice ships: the same facts in the privacy policy and
   Apple's privacy answers; confirm on-device recognition per language (if a
   language is recognised on Apple's servers instead, the wording stays true but
