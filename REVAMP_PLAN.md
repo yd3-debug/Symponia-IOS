@@ -186,6 +186,70 @@ allow a character to float freely over the home screen.
   a month on the real-time models). Needs Starter or above before release.
   Key for this app: its own key, Text to Speech access only.
 
+## Agreement before use (built 2026-10-09)
+
+Shown before Symponia does anything, with or without an account.
+
+- `components/revamp/BeforeWeBegin.tsx`: five plain statements (it is an AI and
+  not a person; not therapy or medical care; cannot help in an emergency, with
+  a helpline link; words are sent to Anthropic; adults only), then three
+  separate unticked boxes: 18+ and Terms/Privacy; understands what it is not;
+  agrees to AI processing. Begin is disabled until all three are ticked.
+- `services/consent.ts` + `consent_records` (applied to the live database):
+  an append-only record of each acceptance with wording version, language and
+  app version. Works before sign-in: rows wait on the device and upload when a
+  session exists. Change the wording and bump `CONSENT_VERSION`, and everyone
+  is asked again.
+- Wording mirrors section 5 of the published Terms and the AI disclosure in
+  New York's companion law. Translated into the other eight languages.
+- Tested in headless Chrome: Begin does nothing with zero or two boxes ticked;
+  with three it proceeds, stores the version and is not shown again.
+
+**Not legal advice, and not yet reviewed by a lawyer.** Before release:
+
+1. A solicitor reads the screen, the Terms and the Privacy Policy together
+   (England and Wales governs; users are worldwide). Native speakers check the
+   eight translations.
+2. Publish the crisis protocol on the website (California SB 243 asks for it
+   to be public) and build the in-app crisis flow that matches it.
+3. Repeat the "I am an AI, not a person" notice at the start of every session
+   and at least every three hours in a long one (New York, California).
+4. Show a "may not be suitable for minors" notice; keep 18+ in the Terms and
+   set the App Store age rating to match.
+5. Add ElevenLabs and the new data to the Privacy Policy and Apple's privacy
+   answers; state how long each provider keeps data.
+6. Never promise confidentiality in the app's copy. Say "private", and only
+   where the Privacy Policy backs it.
+7. Let people withdraw each consent in Settings, and record the withdrawal.
+8. Ask an insurance broker about cover for a wellbeing app (professional
+   indemnity / technology errors and omissions). A disclaimer limits risk; it
+   does not remove it.
+9. Consider whether reflections are "special category" data under UK/EU law
+   (they may reveal health). If so the separate, explicit AI-processing box is
+   doing necessary work: keep it separate.
+
+## Starting without an account (agreed 2026-10-09; not built)
+
+Open the app, a temporary account is created silently, agree, pick animals,
+first session; then "shall I keep this for you?" links it to Apple, Google or
+email. Required at subscription.
+
+**Blocker found:** `profiles` uses `email` as its primary key and it cannot be
+empty, and the new-user trigger inserts by email. A temporary account has no
+email, so today its creation would fail. **Do not switch on "Allow anonymous
+sign-ins" in Supabase until this is changed.** The change:
+
+- make `user_id` the primary key and required; allow `email` to be empty but
+  keep it unique, so the shipped app's `onConflict: 'email'` still works;
+- rewrite `handle_new_user` to insert by `user_id`;
+- review every function that looks a profile up by email (`verify-receipt`,
+  `apple-notification`, `delete-account`, `stripe-webhook`, `oracle`);
+- then: abuse protection for temporary accounts (device attestation or
+  captcha, first-session-only limits), automatic clean-up of unused ones, and
+  linking on sign-in so nothing is lost.
+
+Do it as its own tested step, with the live app's sign-up checked afterwards.
+
 ## After launch
 
 - Redesign the website home page in full, once the new app is live (Yekta,

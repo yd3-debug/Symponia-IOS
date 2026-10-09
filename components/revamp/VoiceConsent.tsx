@@ -75,7 +75,8 @@ export function VoiceConsent({
                 style={[styles.choice, on && styles.choiceOn]}
                 onPress={() => setKind(k)}
                 accessibilityRole="radio"
-                accessibilityState={{ selected: on }}
+                accessibilityState={{ selected: on, checked: on }}
+                aria-checked={on}
               >
                 <View style={[styles.radio, on && styles.radioOn]}>{on && <View style={styles.radioDot} />}</View>
                 <Text style={[styles.choiceText, on && { color: PAPER.ink, fontWeight: '600' }]}>

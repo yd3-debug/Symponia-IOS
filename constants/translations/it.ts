@@ -692,6 +692,26 @@ const it: Record<string, string> = {
   "A man’s voice": "Una voce maschile",
   "Use voice": "Usa la voce",
   "Type instead": "Preferisco scrivere",
+  // ── Before we begin (revamp). Legal wording: have a native speaker and a lawyer review. ──
+  "Before we begin": "Prima di iniziare",
+  "Please read these. They matter.": "Leggi queste righe, per favore. Sono importanti.",
+  "I am an AI.": "Sono un’IA.",
+  "I am a computer program, not a human being. I cannot feel human emotion, however I sound.": "Sono un programma informatico, non un essere umano. Non posso provare emozioni umane, anche se dal tono può sembrare.",
+  "This is not therapy or medical care.": "Questa non è terapia né assistenza medica.",
+  "Symponia is not a medical, therapeutic, psychiatric, psychological or counselling service. It does not diagnose or treat anything, and it is not a substitute for professional care.": "Symponia non è un servizio medico, terapeutico, psichiatrico, psicologico o di consulenza. Non fa diagnosi, non cura nulla e non sostituisce l’aiuto di un professionista.",
+  "I cannot help in an emergency.": "Non posso aiutarti in un’emergenza.",
+  "If you are in crisis, or think you may harm yourself or someone else, contact your local emergency services or a crisis line now.": "Se sei in crisi, o pensi di poter fare del male a te o a qualcun altro, contatta subito i servizi di emergenza o una linea di ascolto.",
+  "Find a helpline near you": "Trova una linea di ascolto vicino a te",
+  "Your words are processed by AI.": "Le tue parole sono elaborate da un’IA.",
+  "What you write is sent to Anthropic, the company that makes the Claude AI model, to write my replies. That includes anything personal or sensitive you choose to share.": "Ciò che scrivi viene inviato ad Anthropic, l’azienda che sviluppa il modello di IA Claude, per scrivere le mie risposte. Questo include qualsiasi cosa personale o delicata tu scelga di condividere.",
+  "For adults.": "Per adulti.",
+  "Symponia is for people aged 18 and over.": "Symponia è per persone dai 18 anni in su.",
+  "I am 18 or older, and I agree to the {terms} and the {privacy}.": "Ho 18 anni o più e accetto i {terms} e l’{privacy}.",
+  "Terms": "Termini",
+  "I understand that Symponia is an AI, not a person, not therapy and not medical care, and that it cannot help in an emergency.": "Capisco che Symponia è un’IA, non una persona, non è terapia né assistenza medica, e che non può aiutare in un’emergenza.",
+  "I agree to what I write being sent to Anthropic to produce replies, including personal or sensitive things I choose to share.": "Accetto che ciò che scrivo venga inviato ad Anthropic per produrre le risposte, comprese le cose personali o delicate che scelgo di condividere.",
+  "Begin": "Inizia",
+  "You can change your mind at any time in Settings.": "Puoi cambiare idea in qualsiasi momento nelle Impostazioni.",
 };
 
 export default it;

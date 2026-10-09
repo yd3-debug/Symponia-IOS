@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
@@ -6,7 +6,9 @@ import type { CloudState } from '@/components/revamp/Cloud';
 import { DraggableCloud } from '@/components/revamp/DraggableCloud';
 import { Glass } from '@/components/revamp/Glass';
 import { Paper, PAPER } from '@/components/revamp/Paper';
+import { BeforeWeBegin } from '@/components/revamp/BeforeWeBegin';
 import { VoiceConsent } from '@/components/revamp/VoiceConsent';
+import { acceptBasics, hasAcceptedBasics, recordVoiceConsent } from '@/services/consent';
 import { setVoicePrefs } from '@/services/voice';
 
 // The revamp home screen ("home screen B"), as a standalone preview.
@@ -28,17 +30,35 @@ export default function Lab() {
   const [state, setState] = useState<CloudState>('idle');
   // Preview only: Talk opens the voice consent screen the first time.
   const [askVoice, setAskVoice] = useState(false);
+  // null while we look up whether the current wording was already accepted.
+  const [agreed, setAgreed] = useState<boolean | null>(null);
+  useEffect(() => {
+    hasAcceptedBasics().then(setAgreed);
+  }, []);
 
   // One layout for every iPhone: the cloud scales with the screen but is capped,
   // and the card is pinned above the tab bar, so nothing depends on a fixed
   // screen height.
   const cloudW = Math.min(width * (small ? 0.5 : 0.62), 270);
 
+  if (agreed === null) return <Paper hills={false} sky={false} />;
+  if (!agreed) {
+    return (
+      <BeforeWeBegin
+        onBegin={() => {
+          acceptBasics().catch(() => {});
+          setAgreed(true);
+        }}
+      />
+    );
+  }
+
   if (askVoice) {
     return (
       <VoiceConsent
         onChoose={(choice) => {
           setVoicePrefs(choice).catch(() => {});
+          recordVoiceConsent(choice.enabled).catch(() => {});
           setAskVoice(false);
           setState(choice.enabled ? 'listening' : 'idle');
         }}

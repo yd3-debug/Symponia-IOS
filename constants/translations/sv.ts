@@ -692,6 +692,26 @@ const sv: Record<string, string> = {
   "A man’s voice": "En mansröst",
   "Use voice": "Använd röst",
   "Type instead": "Skriv i stället",
+  // ── Before we begin (revamp). Legal wording: have a native speaker and a lawyer review. ──
+  "Before we begin": "Innan vi börjar",
+  "Please read these. They matter.": "Läs det här, tack. Det är viktigt.",
+  "I am an AI.": "Jag är en AI.",
+  "I am a computer program, not a human being. I cannot feel human emotion, however I sound.": "Jag är ett datorprogram, inte en människa. Jag kan inte känna mänskliga känslor, hur jag än låter.",
+  "This is not therapy or medical care.": "Det här är inte terapi eller sjukvård.",
+  "Symponia is not a medical, therapeutic, psychiatric, psychological or counselling service. It does not diagnose or treat anything, and it is not a substitute for professional care.": "Symponia är inte en medicinsk, terapeutisk, psykiatrisk, psykologisk eller rådgivande tjänst. Den ställer inga diagnoser, behandlar ingenting och ersätter inte professionell hjälp.",
+  "I cannot help in an emergency.": "Jag kan inte hjälpa till i en nödsituation.",
+  "If you are in crisis, or think you may harm yourself or someone else, contact your local emergency services or a crisis line now.": "Om du är i kris, eller tror att du kan skada dig själv eller någon annan, kontakta larmtjänsten eller en stödlinje nu.",
+  "Find a helpline near you": "Hitta en stödlinje nära dig",
+  "Your words are processed by AI.": "Dina ord behandlas av AI.",
+  "What you write is sent to Anthropic, the company that makes the Claude AI model, to write my replies. That includes anything personal or sensitive you choose to share.": "Det du skriver skickas till Anthropic, företaget bakom AI-modellen Claude, för att skriva mina svar. Det gäller även personliga eller känsliga saker som du väljer att dela.",
+  "For adults.": "För vuxna.",
+  "Symponia is for people aged 18 and over.": "Symponia är för personer som är 18 år eller äldre.",
+  "I am 18 or older, and I agree to the {terms} and the {privacy}.": "Jag är 18 år eller äldre och godkänner {terms} och {privacy}.",
+  "Terms": "Villkoren",
+  "I understand that Symponia is an AI, not a person, not therapy and not medical care, and that it cannot help in an emergency.": "Jag förstår att Symponia är en AI, inte en människa, inte terapi och inte sjukvård, och att den inte kan hjälpa till i en nödsituation.",
+  "I agree to what I write being sent to Anthropic to produce replies, including personal or sensitive things I choose to share.": "Jag godkänner att det jag skriver skickas till Anthropic för att ta fram svaren, även personliga eller känsliga saker som jag väljer att dela.",
+  "Begin": "Börja",
+  "You can change your mind at any time in Settings.": "Du kan ändra dig när som helst i Inställningar.",
 };
 
 export default sv;

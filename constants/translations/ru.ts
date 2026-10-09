@@ -693,6 +693,26 @@ const ru: Record<string, string> = {
   "A man’s voice": "Мужской голос",
   "Use voice": "Говорить голосом",
   "Type instead": "Лучше печатать",
+  // ── Before we begin (revamp). Legal wording: have a native speaker and a lawyer review. ──
+  "Before we begin": "Прежде чем мы начнём",
+  "Please read these. They matter.": "Пожалуйста, прочитай это. Это важно.",
+  "I am an AI.": "Я — ИИ.",
+  "I am a computer program, not a human being. I cannot feel human emotion, however I sound.": "Я компьютерная программа, а не человек. Я не могу испытывать человеческие эмоции, как бы ни звучал мой голос.",
+  "This is not therapy or medical care.": "Это не терапия и не медицинская помощь.",
+  "Symponia is not a medical, therapeutic, psychiatric, psychological or counselling service. It does not diagnose or treat anything, and it is not a substitute for professional care.": "Symponia не является медицинской, терапевтической, психиатрической, психологической или консультационной службой. Она не ставит диагнозов, ничего не лечит и не заменяет профессиональную помощь.",
+  "I cannot help in an emergency.": "Я не могу помочь в экстренной ситуации.",
+  "If you are in crisis, or think you may harm yourself or someone else, contact your local emergency services or a crisis line now.": "Если у тебя кризис или ты думаешь, что можешь причинить вред себе или кому-то ещё, сейчас же обратись в экстренные службы или на линию помощи.",
+  "Find a helpline near you": "Найти линию помощи рядом с тобой",
+  "Your words are processed by AI.": "Твои слова обрабатывает ИИ.",
+  "What you write is sent to Anthropic, the company that makes the Claude AI model, to write my replies. That includes anything personal or sensitive you choose to share.": "То, что ты пишешь, отправляется в Anthropic, компанию, создавшую ИИ-модель Claude, чтобы составить мои ответы. Это касается и всего личного или чувствительного, чем ты решишь поделиться.",
+  "For adults.": "Для взрослых.",
+  "Symponia is for people aged 18 and over.": "Symponia предназначена для людей от 18 лет.",
+  "I am 18 or older, and I agree to the {terms} and the {privacy}.": "Мне 18 лет или больше, и я принимаю {terms} и {privacy}.",
+  "Terms": "Условия использования",
+  "I understand that Symponia is an AI, not a person, not therapy and not medical care, and that it cannot help in an emergency.": "Я понимаю, что Symponia — это ИИ, а не человек, не терапия и не медицинская помощь, и что она не может помочь в экстренной ситуации.",
+  "I agree to what I write being sent to Anthropic to produce replies, including personal or sensitive things I choose to share.": "Я даю согласие на то, что написанное мной отправляется в Anthropic для создания ответов, включая личное или чувствительное, чем я решу поделиться.",
+  "Begin": "Начать",
+  "You can change your mind at any time in Settings.": "Передумать можно в любой момент в Настройках.",
 };
 
 export default ru;
