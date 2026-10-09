@@ -45,6 +45,39 @@ Yekta's Mac cannot run the iOS Simulator. So:
   are sent over the air with `eas update --channel revamp`; no rebuild.
 - A new build is needed only when a native module is added.
 
+## Builds: as few as possible
+
+Checked on 2026-10-09 in the Expo account (`yekta7`): Starter plan, $19 a month,
+which includes $45 of build credit. An iOS build costs about $2 of that credit
+($6 for 3 builds this cycle), so roughly 19 more builds are covered before any
+extra charge. Over-the-air updates are included up to 3,000 monthly users.
+
+Even so, the rule is: build once for device testing, once for submission.
+
+1. Finish everything that can be checked in the browser preview first: home
+   screen, animal picker, onboarding screens, text conversation, crisis screen.
+2. Settle every native module before the build: Expo SDK upgrade, speech
+   recognition library, audio.
+3. **Revamp build** to TestFlight. From then on, changes go over the air.
+4. **Submission build** at the end.
+
+The 1.0.8 crash fix is separate: the live app has no update channel, so it can
+only ship as its own build.
+
+## iPhone Duo
+
+Apple's foldable (5.4" outer, 7.6" inner), on sale 23 October 2026. Existing
+apps keep working. To be optimised an app must be built with the iOS 27.1 SDK;
+Duo screenshots are required for updates submitted from April 2027.
+
+- This app is on Expo SDK 54 (iOS 26 tools). Latest stable is SDK 57; SDK 58 is
+  in beta and targets iOS 27. Reports say SDK 57.0.23+ can build with Xcode 27.
+  Confirm in Expo's own docs before relying on it.
+- Upgrade one SDK at a time (55, 56, 57), `npx expo install --fix` at each step.
+- The preview layout holds at Duo-like sizes. To do for the inner display: cap
+  the card width, and ship a sharper hills drawing (the current one is enlarged
+  and goes soft).
+
 ## Phases
 
 | Phase | Builds | Done when |
