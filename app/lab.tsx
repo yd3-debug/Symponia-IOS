@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
-import { Cloud, type CloudState } from '@/components/revamp/Cloud';
+import type { CloudState } from '@/components/revamp/Cloud';
+import { DraggableCloud } from '@/components/revamp/DraggableCloud';
 import { Glass } from '@/components/revamp/Glass';
 import { Paper, PAPER } from '@/components/revamp/Paper';
 
@@ -42,7 +43,7 @@ export default function Lab() {
       {/* The cloud takes whatever height the card leaves and sits a little
           above the middle of it, so the layout holds on every iPhone. */}
       <View style={[styles.cloudWrap, { paddingTop: insets.top + 36 }]}>
-        <Cloud state={state} width={cloudW} />
+        <DraggableCloud state={state} width={cloudW} />
       </View>
 
       <View style={[styles.bottom, { paddingBottom: insets.bottom + 14 }]}>
@@ -128,7 +129,7 @@ const styles = StyleSheet.create({
   switchText: { fontFamily: FONT, fontSize: 12, color: PAPER.inkSoft, opacity: 0.6 },
   switchOn: { opacity: 1, color: PAPER.teal, fontWeight: '700' },
 
-  cloudWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 28 },
+  cloudWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 28, zIndex: 2 },
 
   bottom: { paddingHorizontal: 18, alignItems: 'center', gap: 14 },
   card: { alignSelf: 'stretch', borderRadius: 30, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 18 },
