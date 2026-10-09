@@ -159,6 +159,11 @@ allow a character to float freely over the home screen.
   Apple's privacy answers; confirm on-device recognition per language (if a
   language is recognised on Apple's servers instead, the wording stays true but
   say so in the policy); check ElevenLabs' retention terms.
+- Voices chosen by Yekta (2026-10-09), in `supabase/functions/_shared/voices.ts`:
+  woman = Marie Callahasin (`L98c1yZIIK3on1wizQ55`), man = Miles
+  (`vSjOBQp24DUB2COr2xI9`). Both are Voice Library voices: add them to the
+  account's own voices, confirm the plan allows library voices over the API,
+  and listen to each in all nine languages.
 - ElevenLabs account (checked 2026-10-09): Free plan, API access included, no
   commercial licence. Fine for building and private testing (20,000 characters
   a month on the real-time models). Needs Starter or above before release.
