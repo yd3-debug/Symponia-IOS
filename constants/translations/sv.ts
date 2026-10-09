@@ -680,6 +680,18 @@ const sv: Record<string, string> = {
   // ── Coverage pass 14: signup error messages ──
   'Your account was created, but email confirmation is on. Please confirm your email, then sign in.': 'Ditt konto skapades, men e-postbekräftelse är påslagen. Bekräfta din e-post och logga sedan in.',
   'We could not finish creating your account. Please check your connection and try again.': 'Vi kunde inte slutföra skapandet av ditt konto. Kontrollera din anslutning och försök igen.',
+  // ── Voice consent (revamp) ──
+  "Shall we talk out loud?": "Ska vi prata högt med varandra?",
+  "You speak, and I answer in a voice. Here is what that involves.": "Du pratar och jag svarar med en röst. Så här fungerar det.",
+  "Your microphone is on only while you are speaking to me.": "Din mikrofon är bara på medan du pratar med mig.",
+  "Apple turns your speech into text. Symponia never keeps the recording.": "Apple gör om ditt tal till text. Symponia sparar aldrig inspelningen.",
+  "My replies are read aloud by a voice from ElevenLabs. The text of each reply is sent to them for that.": "Mina svar läses upp av en röst från ElevenLabs. Texten i varje svar skickas till dem för det.",
+  "You can type instead at any moment, and turn voice off in Settings.": "Du kan när som helst skriva i stället och stänga av rösten i Inställningar.",
+  "My voice": "Min röst",
+  "A woman’s voice": "En kvinnoröst",
+  "A man’s voice": "En mansröst",
+  "Use voice": "Använd röst",
+  "Type instead": "Skriv i stället",
 };
 
 export default sv;

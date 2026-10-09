@@ -681,6 +681,18 @@ const ru: Record<string, string> = {
   // ── Coverage pass 14: signup error messages ──
   'Your account was created, but email confirmation is on. Please confirm your email, then sign in.': 'Ваш аккаунт создан, но подтверждение по эл. почте включено. Пожалуйста, подтвердите почту, а затем войдите.',
   'We could not finish creating your account. Please check your connection and try again.': 'Не удалось завершить создание вашего аккаунта. Пожалуйста, проверьте соединение и попробуйте ещё раз.',
+  // ── Voice consent (revamp) ──
+  "Shall we talk out loud?": "Поговорим вслух?",
+  "You speak, and I answer in a voice. Here is what that involves.": "Ты говоришь, а я отвечаю голосом. Вот что это означает.",
+  "Your microphone is on only while you are speaking to me.": "Микрофон включён только пока ты говоришь со мной.",
+  "Apple turns your speech into text. Symponia never keeps the recording.": "Apple превращает твою речь в текст. Symponia никогда не сохраняет запись.",
+  "My replies are read aloud by a voice from ElevenLabs. The text of each reply is sent to them for that.": "Мои ответы озвучивает голос от ElevenLabs. Для этого им отправляется текст каждого ответа.",
+  "You can type instead at any moment, and turn voice off in Settings.": "В любой момент можно печатать вместо этого и отключить голос в Настройках.",
+  "My voice": "Мой голос",
+  "A woman’s voice": "Женский голос",
+  "A man’s voice": "Мужской голос",
+  "Use voice": "Говорить голосом",
+  "Type instead": "Лучше печатать",
 };
 
 export default ru;

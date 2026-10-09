@@ -6,6 +6,8 @@ import type { CloudState } from '@/components/revamp/Cloud';
 import { DraggableCloud } from '@/components/revamp/DraggableCloud';
 import { Glass } from '@/components/revamp/Glass';
 import { Paper, PAPER } from '@/components/revamp/Paper';
+import { VoiceConsent } from '@/components/revamp/VoiceConsent';
+import { setVoicePrefs } from '@/services/voice';
 
 // The revamp home screen ("home screen B"), as a standalone preview.
 //
@@ -24,11 +26,25 @@ export default function Lab() {
   // Small phones (iPhone SE) get a smaller cloud so the card never crowds it.
   const small = height < 700;
   const [state, setState] = useState<CloudState>('idle');
+  // Preview only: Talk opens the voice consent screen the first time.
+  const [askVoice, setAskVoice] = useState(false);
 
   // One layout for every iPhone: the cloud scales with the screen but is capped,
   // and the card is pinned above the tab bar, so nothing depends on a fixed
   // screen height.
   const cloudW = Math.min(width * (small ? 0.5 : 0.62), 270);
+
+  if (askVoice) {
+    return (
+      <VoiceConsent
+        onChoose={(choice) => {
+          setVoicePrefs(choice).catch(() => {});
+          setAskVoice(false);
+          setState(choice.enabled ? 'listening' : 'idle');
+        }}
+      />
+    );
+  }
 
   return (
     <Paper>
@@ -52,7 +68,7 @@ export default function Lab() {
           <Text style={styles.heading}>You went quiet yesterday.</Text>
           <Text style={styles.sub}>Shall we pick it up?</Text>
           <View style={styles.actions}>
-            <Pressable style={styles.action} onPress={() => setState('listening')} accessibilityRole="button" accessibilityLabel="Talk">
+            <Pressable style={styles.action} onPress={() => setAskVoice(true)} accessibilityRole="button" accessibilityLabel="Talk">
               <Glass tint={PAPER.indigo} interactive style={styles.button}>
                 <MicIcon color="#fff" />
                 <Text style={[styles.buttonText, { color: '#fff' }]}>Talk</Text>

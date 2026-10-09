@@ -681,6 +681,18 @@ const de: Record<string, string> = {
   // ── Coverage pass 14: signup error messages ──
   'Your account was created, but email confirmation is on. Please confirm your email, then sign in.': 'Dein Konto wurde erstellt, aber die E-Mail-Bestätigung ist aktiviert. Bitte bestätige deine E-Mail und melde dich dann an.',
   'We could not finish creating your account. Please check your connection and try again.': 'Wir konnten die Erstellung deines Kontos nicht abschließen. Bitte überprüfe deine Verbindung und versuche es erneut.',
+  // ── Voice consent (revamp) ──
+  "Shall we talk out loud?": "Wollen wir laut miteinander sprechen?",
+  "You speak, and I answer in a voice. Here is what that involves.": "Du sprichst, und ich antworte mit einer Stimme. Das gehört dazu:",
+  "Your microphone is on only while you are speaking to me.": "Dein Mikrofon ist nur an, während du mit mir sprichst.",
+  "Apple turns your speech into text. Symponia never keeps the recording.": "Apple wandelt deine Sprache in Text um. Symponia speichert die Aufnahme nie.",
+  "My replies are read aloud by a voice from ElevenLabs. The text of each reply is sent to them for that.": "Meine Antworten werden von einer Stimme von ElevenLabs vorgelesen. Dafür wird der Text jeder Antwort an ElevenLabs gesendet.",
+  "You can type instead at any moment, and turn voice off in Settings.": "Du kannst jederzeit stattdessen tippen und die Stimme in den Einstellungen ausschalten.",
+  "My voice": "Meine Stimme",
+  "A woman’s voice": "Eine Frauenstimme",
+  "A man’s voice": "Eine Männerstimme",
+  "Use voice": "Stimme verwenden",
+  "Type instead": "Lieber tippen",
 };
 
 export default de;

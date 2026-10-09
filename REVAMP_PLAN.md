@@ -143,6 +143,33 @@ allow a character to float freely over the home screen.
 - [ ] Check real Liquid Glass and frame rate on a phone (needs build 1).
 - [ ] The label and heading are placeholder copy until memory exists (Phase 4).
 
+## Voice disclosure (built 2026-10-09, ahead of the voice session)
+
+- `components/revamp/VoiceConsent.tsx`: shown before the first spoken session
+  and from Settings. Says when the microphone is on, that Apple turns speech
+  into text, that ElevenLabs reads the replies and receives their text, and
+  that typing always works. Woman's or man's voice is chosen here. Translated
+  into all nine languages.
+- `services/voice.ts`: the answer, cached on the device and mirrored to the
+  profile. `null` = not asked, `false` = types.
+- `supabase/migrations/20261009120000_add_voice_prefs.sql`: **not applied**.
+  Apply with Phase 2; the server must refuse to make speech unless
+  `voice_enabled` is true.
+- Still to do before voice ships: the same facts in the privacy policy and
+  Apple's privacy answers; confirm on-device recognition per language (if a
+  language is recognised on Apple's servers instead, the wording stays true but
+  say so in the policy); check ElevenLabs' retention terms.
+- ElevenLabs account (checked 2026-10-09): Free plan, API access included, no
+  commercial licence. Fine for building and private testing (20,000 characters
+  a month on the real-time models). Needs Starter or above before release.
+  Key for this app: its own key, Text to Speech access only.
+
+## After launch
+
+- Redesign the website home page in full, once the new app is live (Yekta,
+  2026-10-09). Until then the site says nothing about the new features.
+- Marketing: see `MARKETING_PLAN.md`.
+
 ## Supabase findings (2026-10-09, dashboard read only)
 
 - The Symponia organisation is on the **Free plan**. That means no automatic
