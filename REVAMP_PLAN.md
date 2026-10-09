@@ -70,10 +70,10 @@ Apple's foldable (5.4" outer, 7.6" inner), on sale 23 October 2026. Existing
 apps keep working. To be optimised an app must be built with the iOS 27.1 SDK;
 Duo screenshots are required for updates submitted from April 2027.
 
-- This app is on Expo SDK 54 (iOS 26 tools). Latest stable is SDK 57; SDK 58 is
-  in beta and targets iOS 27. Reports say SDK 57.0.23+ can build with Xcode 27.
-  Confirm in Expo's own docs before relying on it.
-- Upgrade one SDK at a time (55, 56, 57), `npx expo install --fix` at each step.
+- Done 2026-10-09: upgraded from Expo SDK 54 to 57 (React Native 0.86), with
+  scene support on and the `revamp` build profile pinned to Expo's Xcode 27.1
+  image. Steps and findings are in `EXPO_UPGRADE_54_TO_57.md`. Not yet proven
+  by a real build; `revamp-xcode26` is the fallback profile.
 - The preview layout holds at Duo-like sizes. To do for the inner display: cap
   the card width, and ship a sharper hills drawing (the current one is enlarged
   and goes soft).
@@ -138,9 +138,8 @@ allow a character to float freely over the home screen.
 - Speech service for the spoken replies: provider, price per reply, and whether
   it is good in all nine languages. Must be settled before Phase 2, because the
   Terms promise unlimited use with a published fair-use limit.
-- Speech recognition library: `@react-native-voice/voice` is installed but
-  unused and poorly maintained. Decide in Phase 2 whether to replace it, which
-  would mean a second build.
+- Speech recognition: settled. `@react-native-voice/voice` removed,
+  `expo-speech-recognition` installed, so it is in the first build.
 
 ## Security checklist (run every phase)
 

@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
 
   cards: { gap: 12, marginBottom: 32 },
   card: { borderRadius: 20, overflow: 'hidden', borderWidth: 0.5 },
-  cardBg: { ...StyleSheet.absoluteFillObject },
+  cardBg: { ...StyleSheet.absoluteFill },
   cardBorderTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 0.5 },
   cardRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 20, gap: 16 },
   cardGlyph: { fontSize: 28, width: 38, textAlign: 'center', lineHeight: 34 },

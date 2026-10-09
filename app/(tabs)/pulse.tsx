@@ -1324,7 +1324,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 0.5,
   },
-  cardBg: { ...StyleSheet.absoluteFillObject },
+  cardBg: { ...StyleSheet.absoluteFill },
   cardBorderTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 0.5 },
   cardPad: { padding: 18 },
 

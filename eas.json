@@ -25,6 +25,14 @@
       "distribution": "store",
       "channel": "revamp",
       "ios": {
+        "autoIncrement": true,
+        "image": "macos-tahoe-26.6-xcode-27.1"
+      }
+    },
+    "revamp-xcode26": {
+      "distribution": "store",
+      "channel": "revamp",
+      "ios": {
         "autoIncrement": true
       }
     }

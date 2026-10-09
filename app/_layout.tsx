@@ -387,7 +387,7 @@ function AppShell() {
           animation: 'fade',
         }}
       />
-      <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor={colors.bg} translucent />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       {!isReady && <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }]} />}
     </View>
   );

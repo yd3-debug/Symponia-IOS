@@ -6,7 +6,7 @@ import { Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from '@/components/Text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import type { BottomTabBarProps } from "expo-router/js-tabs";
 
 const FONT = Platform.select({ ios: 'Helvetica Neue', android: 'Roboto', default: 'System' });
 
