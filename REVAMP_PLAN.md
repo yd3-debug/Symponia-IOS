@@ -90,7 +90,22 @@ Duo screenshots are required for updates submitted from April 2027.
 | 5. Pricing and review | Free first session, free daily moment, annual plan, Apple compliance check | A build ready to submit |
 | 6. Launch, then website | Store listing, screenshots, website, marketing content | Live |
 
-Later, as its own build: a home-screen widget showing the cloud. iOS does not
+Agreed on 2026-10-09, borrowed from Tolan and reshaped for Symponia:
+
+- **The day's animal asks its question** (Phase 4). Seven animals, seven days.
+- **The cloud keeps a journal** of your sessions, written from its point of
+  view (Phase 4). The middle tab is the journal.
+- **Weekly pattern summary** (Phase 4).
+- **The pencil landscape fills in as you progress**: trees, flowers, more
+  stars. Small drawings added to the page, not a new screen (Phase 4).
+- **A shareable "my seven animals" card** (Phase 6, for marketing).
+- **A free daily moment**, with depth, memory and long conversations paid
+  (Phase 5).
+- Not doing: photo sharing, a shared space with friends, everyday-help
+  features such as meal plans.
+
+Later, as its own build: a home-screen widget showing the cloud, and the
+Dynamic Island during a voice session. iOS does not
 allow a character to float freely over the home screen.
 
 ## Phase 0 status
