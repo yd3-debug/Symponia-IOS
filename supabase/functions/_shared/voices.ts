@@ -1,5 +1,5 @@
 // The cloud's two voices, chosen by Yekta on 2026-10-09 from the ElevenLabs
-// Voice Library. Voice ids are not secret; the API key is, and lives only in
+// Voice Library. (Jeremy replaced the first choice for the man's voice, Miles.) Voice ids are not secret; the API key is, and lives only in
 // the function secrets as ELEVENLABS_API_KEY.
 //
 // Keys match profiles.voice_kind and services/voice.ts.
@@ -11,7 +11,7 @@
 //     pages list English plus about twenty other verified languages each.
 export const CLOUD_VOICES = {
   woman: { id: 'L98c1yZIIK3on1wizQ55', name: 'Marie Callahasin' },
-  man: { id: 'vSjOBQp24DUB2COr2xI9', name: 'Miles' },
+  man: { id: '5gaEGrWSk4v20HMfIhgC', name: 'Jeremy' },
 } as const;
 
 export type CloudVoiceKind = keyof typeof CLOUD_VOICES;
